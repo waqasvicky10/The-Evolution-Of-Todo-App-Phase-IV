@@ -1,0 +1,33 @@
+/**
+ * Global styles for the application.
+ *
+ * Includes Tailwind CSS directives and custom global styles.
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+/* Custom global styles */
+@layer base {
+  html {
+    @apply antialiased;
+  }
+
+  body {
+    @apply bg-gray-50 text-gray-900;
+  }
+}
+
+
+/* Custom component styles */
+@layer components {
+  /* Add custom component classes here if needed */
+}
+
+
+/* Custom utility styles */
+@layer utilities {
+  /* Add custom utility classes here if needed */
+}

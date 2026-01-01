@@ -1,0 +1,20 @@
+Generic single-database configuration with SQLModel support.
+
+This Alembic environment is configured to work with SQLModel models.
+
+Usage:
+
+# Create a new migration
+alembic revision --autogenerate -m "Description of changes"
+
+# Apply migrations
+alembic upgrade head
+
+# Revert last migration
+alembic downgrade -1
+
+# Show current revision
+alembic current
+
+# Show migration history
+alembic history

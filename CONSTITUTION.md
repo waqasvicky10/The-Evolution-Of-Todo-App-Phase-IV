@@ -1,9 +1,10 @@
 # EVOLUTION OF TODO - PROJECT CONSTITUTION
 
-**Version:** 1.0
+**Version:** 2.0
 **Status:** SUPREME GOVERNING DOCUMENT
 **Scope:** All Phases (Phase I through Phase V)
-**Effective Date:** 2025-12-29
+**Effective Date:** 2026-01-01
+**Last Updated:** 2026-01-01 (Phase II Correction)
 
 ---
 
@@ -146,26 +147,47 @@ Each phase MUST maintain:
 
 ### Section 4.1: Approved Technology Stack
 
-**Backend (All Phases):**
+**Phase I (Foundation - In-Memory Console App):**
 - Language: Python 3.11+
-- Web Framework: FastAPI
-- ORM: SQLModel
-- Database: Neon DB (PostgreSQL)
+- Storage: In-memory only (Python data structures)
+- Interface: Console/CLI
+- No external dependencies
+
+**Phase II (Full-Stack Web Application):**
+- **Backend:**
+  - Language: Python 3.11+
+  - Web Framework: FastAPI
+  - ORM: SQLModel
+  - Database: Neon Serverless PostgreSQL
+  - Authentication: Better Auth with JWT
+- **Frontend:**
+  - Framework: Next.js (App Router)
+  - Language: TypeScript
+  - State Management: As specified per requirements
+  - UI Library: As specified per requirements
+- **API:**
+  - RESTful API design
+  - JWT-based authentication
+  - User-level data isolation
+
+**Phase III (Intelligent Agent Integration):**
 - Agent Framework: OpenAI Agents SDK
 - Integration: Model Context Protocol (MCP)
+- Agent Features: Multi-agent orchestration, NLP, task delegation
+- Builds upon Phase II architecture
 
-**Frontend (Phase III+):**
-- Framework: Next.js (App Router)
-- Language: TypeScript
-- State Management: As specified per phase
-- UI Library: As specified per phase
-
-**Infrastructure (Phase IV+):**
+**Phase IV (Distribution & Scale):**
 - Containerization: Docker
 - Orchestration: Kubernetes
 - Message Queue: Apache Kafka
 - Service Mesh: Dapr
 - Cloud Provider: As specified (AWS/Azure/GCP)
+
+**Phase V (Enterprise Features):**
+- Advanced observability
+- Audit logging
+- Enterprise workflows
+- Advanced orchestration
 
 ### Section 4.2: Technology Substitution
 - Technologies MAY NOT be substituted without constitutional amendment
@@ -202,7 +224,7 @@ All implementations MUST adhere to:
 
 ### Section 5.2: Layered Architecture Pattern
 Required layers:
-1. **Presentation Layer:** API endpoints, request/response handling
+1. **Presentation Layer:** API endpoints, request/response handling, UI components
 2. **Business Logic Layer:** Domain logic, use cases, orchestration
 3. **Data Access Layer:** Database operations, external service calls
 4. **Domain Model Layer:** Core entities, value objects, domain logic
@@ -238,8 +260,9 @@ All code MUST include:
 
 ### Section 5.6: Code Quality Standards
 - Type hints required for all Python code
-- Linting: Ruff or equivalent
-- Formatting: Black or equivalent
+- TypeScript for all frontend code
+- Linting: Ruff (Python), ESLint (TypeScript)
+- Formatting: Black (Python), Prettier (TypeScript)
 - Docstrings required for public APIs
 - No commented-out code in production
 - No hardcoded credentials or secrets
@@ -312,30 +335,61 @@ When violations occur:
 
 ## ARTICLE VIII: PHASE-SPECIFIC PROVISIONS
 
-### Section 8.1: Phase I - Foundation
-- Focus: Core backend, single user, local persistence
-- Scope: Basic CRUD, CLI agent, minimal architecture
-- Deliverable: Working local todo system with agent interaction
+### Section 8.1: Phase I - Foundation (COMPLETE)
+- **Focus:** Core in-memory console application
+- **Scope:** Single user, basic CRUD operations, CLI interface
+- **Technology:** Python standard library only, no persistence
+- **Deliverable:** Working in-memory todo system with console interface
+- **Status:** ✅ APPROVED AND COMPLETE
 
-### Section 8.2: Phase II - Intelligence
-- Focus: Multi-agent orchestration, smart task understanding
-- Scope: Agent swarms, natural language processing, task delegation
-- Deliverable: Intelligent todo system with agent collaboration
+### Section 8.2: Phase II - Full-Stack Web Application
+- **Focus:** Multi-user web application with persistent storage
+- **Scope:**
+  - Next.js frontend with TypeScript
+  - FastAPI backend with SQLModel ORM
+  - Neon Serverless PostgreSQL database
+  - Better Auth with JWT authentication
+  - User registration and login
+  - Protected API endpoints (JWT required)
+  - User-level data isolation (users only see their own tasks)
+  - Responsive web UI
+  - Production-grade architecture
+- **Explicitly Out of Scope:**
+  - ❌ NO AI agents
+  - ❌ NO natural language processing
+  - ❌ NO multi-agent orchestration
+  - ❌ NO Model Context Protocol (MCP)
+  - ❌ NO chatbot or intelligent features
+- **Deliverable:** Production-ready multi-user web application with authentication and database persistence
+- **Architecture Requirements:**
+  - Backend must be stateless
+  - All endpoints require JWT (except auth endpoints)
+  - Strict user data isolation at database query level
+  - RESTful API design
+  - Clean separation: Frontend ↔ API ↔ Business Logic ↔ Database
 
-### Section 8.3: Phase III - Scale
-- Focus: Multi-user, web frontend, cloud database
-- Scope: Authentication, Next.js UI, Neon DB, API hardening
-- Deliverable: Production-ready web application
+### Section 8.3: Phase III - Intelligent Agent Integration
+- **Focus:** Multi-agent orchestration, smart task understanding
+- **Scope:**
+  - Agent swarms using OpenAI Agents SDK
+  - Natural language processing for task creation
+  - Task delegation via agents
+  - Model Context Protocol (MCP) integration
+  - Chatbot interface for task management
+- **Prerequisites:** Phase II MUST be complete and approved
+- **Deliverable:** Intelligent todo system with agent collaboration built on Phase II foundation
 
-### Section 8.4: Phase IV - Distribution
-- Focus: Microservices, event-driven, containerization
-- Scope: Service decomposition, Kafka, Docker, Kubernetes
-- Deliverable: Distributed, scalable cloud-native system
+### Section 8.4: Phase IV - Distribution & Scale
+- **Focus:** Microservices, event-driven, containerization
+- **Scope:** Service decomposition, Kafka, Docker, Kubernetes
+- **Prerequisites:** Phase III MUST be complete and approved
+- **Deliverable:** Distributed, scalable cloud-native system
 
-### Section 8.5: Phase V - Enterprise
-- Focus: Advanced orchestration, observability, enterprise features
-- Scope: Dapr, monitoring, audit logs, advanced workflows
-- Deliverable: Enterprise-grade todo management platform
+### Section 8.5: Phase V - Enterprise Features
+- **Focus:** Advanced orchestration, observability, enterprise features
+- **Scope:** Dapr, monitoring, audit logs, advanced workflows
+- **Prerequisites:** Phase IV MUST be complete and approved
+- **Deliverable:** Enterprise-grade todo management platform
 
 ### Section 8.6: Cross-Phase Continuity
 - Database schemas evolve via migrations
@@ -345,7 +399,38 @@ When violations occur:
 
 ---
 
-## ARTICLE IX: DEFINITIONS
+## ARTICLE IX: SECURITY REQUIREMENTS
+
+### Section 9.1: Authentication (Phase II+)
+- All user-facing endpoints MUST require authentication
+- Authentication MUST use JWT tokens
+- Tokens MUST have expiration times
+- Refresh token mechanism MUST be implemented
+- Password storage MUST use secure hashing (bcrypt or better)
+
+### Section 9.2: Authorization (Phase II+)
+- Users MUST only access their own data
+- All database queries MUST filter by authenticated user ID
+- No user may view, modify, or delete another user's tasks
+- Admin roles (if implemented) require separate specification
+
+### Section 9.3: Data Protection
+- No credentials in source code
+- Environment variables for secrets
+- SQL injection prevention via ORM
+- XSS prevention on frontend
+- CORS configured properly
+- HTTPS in production
+
+### Section 9.4: API Security
+- Rate limiting as specified
+- Input validation on all endpoints
+- Output sanitization
+- Error messages must not leak sensitive data
+
+---
+
+## ARTICLE X: DEFINITIONS
 
 - **Agent:** An AI system executing tasks under constitutional governance
 - **Specification:** A formal document defining requirements and architecture
@@ -353,16 +438,22 @@ When violations occur:
 - **Task:** A discrete unit of work with clear acceptance criteria
 - **Phase:** A major evolutionary stage of the project with defined scope
 - **Constitution:** This document, the supreme governing authority
+- **JWT:** JSON Web Token for stateless authentication
+- **User Isolation:** Enforcement that users can only access their own data
 
 ---
 
-## ARTICLE X: ADOPTION AND RATIFICATION
+## ARTICLE XI: ADOPTION AND RATIFICATION
 
 This Constitution is hereby adopted as the governing document for the "Evolution of Todo" project, effective immediately upon ratification.
 
-**Effective Date:** 2025-12-29
-**Version:** 1.0
+**Original Effective Date:** 2025-12-29
+**Version 2.0 Effective Date:** 2026-01-01
+**Version:** 2.0
 **Status:** RATIFIED
+
+**Change Log:**
+- **v2.0 (2026-01-01):** Corrected Phase II definition to Full-Stack Web Application (Next.js + FastAPI + Neon PostgreSQL + Better Auth). Moved AI/agent features to Phase III. Added security requirements (Article IX).
 
 ---
 
@@ -390,13 +481,17 @@ Can I do this work?
 └─ All checks pass? YES → PROCEED with implementation
 ```
 
-### Compliance Checklist
-- [ ] Work is specified in approved document
-- [ ] Work is in current phase scope
+### Phase II Compliance Checklist
+- [ ] Work is specified in PHASE_II_SPECIFICATION.md
+- [ ] Work is Phase II scope (web app, NOT agents)
 - [ ] Task has clear acceptance criteria
+- [ ] No AI/agent features (those are Phase III)
+- [ ] Backend uses FastAPI + SQLModel + Neon PostgreSQL
+- [ ] Frontend uses Next.js App Router + TypeScript
+- [ ] Authentication uses Better Auth + JWT
+- [ ] All endpoints enforce user data isolation
 - [ ] No invented features or enhancements
 - [ ] Architecture follows approved patterns
-- [ ] Technology stack matches constitutional requirements
 - [ ] Code quality meets standards
 - [ ] Tests are included
 
@@ -407,22 +502,58 @@ Can I do this work?
 ### PROHIBITED ❌
 - Writing code without a specification
 - Adding features not in the spec
-- Implementing future-phase functionality
+- Implementing future-phase functionality (e.g., AI agents in Phase II)
 - Making architectural decisions not in specs
 - Using non-approved technologies
 - Skipping the plan stage
 - Refining requirements in code
 - Inventing "improvements"
+- Implementing AI/NLP features in Phase II
+- Bypassing authentication checks
+- Allowing cross-user data access
 
 ### REQUIRED ✅
 - Following Constitution → Spec → Plan → Task → Code
 - Implementing exactly what's specified
 - Staying within phase boundaries
 - Requesting clarification for ambiguities
-- Using approved tech stack
+- Using approved tech stack (Next.js + FastAPI + Neon)
 - Writing tests
 - Maintaining clean architecture
 - Escalating conflicts to spec level
+- Enforcing JWT authentication on all protected endpoints
+- Strict user data isolation
+
+---
+
+## APPENDIX C: PHASE II BOUNDARIES
+
+### ✅ IN PHASE II SCOPE
+- Multi-user web application
+- User registration and login
+- JWT authentication
+- FastAPI RESTful API
+- SQLModel ORM with Neon PostgreSQL
+- Next.js frontend (App Router)
+- TypeScript
+- User-level task CRUD operations
+- Responsive UI
+- Database migrations
+- Environment configuration
+- Error handling
+- Input validation
+- Basic task management features (CRUD)
+
+### ❌ OUT OF PHASE II SCOPE (Phase III+)
+- AI agents
+- Multi-agent orchestration
+- Natural language processing
+- OpenAI Agents SDK
+- Model Context Protocol (MCP)
+- Chatbot interfaces
+- Intelligent task suggestions
+- Agent-based task delegation
+- Any AI/ML features
 
 ---
 
