@@ -1,0 +1,96 @@
+═══════════════════════════════════════════════════════════════
+  VERCEL DEPLOYMENT - CONFIGURATION VALUES
+═══════════════════════════════════════════════════════════════
+
+📋 Use these exact values when deploying to Vercel:
+
+═══════════════════════════════════════════════════════════════
+PROJECT SETTINGS
+═══════════════════════════════════════════════════════════════
+
+Project Name:
+todo-app-phase2
+
+Framework Preset:
+Next.js
+
+Root Directory:
+frontend
+
+Build Command:
+npm run build
+
+Output Directory:
+.next
+
+Install Command:
+npm install
+
+═══════════════════════════════════════════════════════════════
+ENVIRONMENT VARIABLES (Add this 1 variable)
+═══════════════════════════════════════════════════════════════
+
+Name (Key):
+NEXT_PUBLIC_API_BASE_URL
+
+Value:
+[PASTE YOUR RENDER BACKEND URL HERE]
+
+Example:
+https://todo-api-phase2.onrender.com
+
+Environment:
+☑ Production
+☑ Preview
+☑ Development
+
+═══════════════════════════════════════════════════════════════
+YOUR BACKEND URL (Get from Render Dashboard)
+═══════════════════════════════════════════════════════════════
+
+To find your backend URL:
+1. Go to: https://dashboard.render.com
+2. Click on "todo-api-phase2" service
+3. Copy the URL at the top (e.g., https://todo-api-phase2.onrender.com)
+4. Paste above in NEXT_PUBLIC_API_BASE_URL
+
+═══════════════════════════════════════════════════════════════
+AFTER DEPLOYMENT
+═══════════════════════════════════════════════════════════════
+
+1. Copy your Vercel URL (e.g., https://todo-app-phase2.vercel.app)
+
+2. Update backend CORS in Render:
+   - Go to Render Dashboard
+   - Environment → CORS_ORIGINS
+   - Change to your Vercel URL
+   - Save Changes
+
+3. Test your app:
+   - Visit your Vercel URL
+   - Register account
+   - Create tasks
+   - Test all features
+
+═══════════════════════════════════════════════════════════════
+QUICK LINKS
+═══════════════════════════════════════════════════════════════
+
+Vercel Dashboard: https://vercel.com/dashboard
+Render Dashboard: https://dashboard.render.com
+GitHub Repo: https://github.com/waqasvicky10/The-Evolution-Of-Todo-App
+
+═══════════════════════════════════════════════════════════════
+NOTES
+═══════════════════════════════════════════════════════════════
+
+- Framework preset should auto-detect as Next.js
+- Make sure Root Directory is set to "frontend"
+- Environment variable MUST start with NEXT_PUBLIC_ to be accessible
+- After deployment, you MUST update backend CORS_ORIGINS
+
+═══════════════════════════════════════════════════════════════
+READY TO DEPLOY!
+═══════════════════════════════════════════════════════════════
+
+Follow the step-by-step guide in: VERCEL_DEPLOYMENT.md
