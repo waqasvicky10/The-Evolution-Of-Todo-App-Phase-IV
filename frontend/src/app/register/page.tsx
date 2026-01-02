@@ -42,8 +42,27 @@ export default function RegisterPage() {
 
     try {
       await register({ email, password, password_confirmation: passwordConfirmation });
-    } catch (err) {
-      setError(getErrorMessage(err));
+    } catch (err: any) {
+      console.error("Registration error:", err);
+      let errorMessage = "An unexpected error occurred";
+
+      if (typeof err === "string") {
+        errorMessage = err;
+      } else if (err instanceof Error) {
+        errorMessage = err.message;
+      } else if (err?.response?.data?.detail) {
+        // Axios error with detail
+        errorMessage = err.response.data.detail;
+      } else if (err?.message) {
+        errorMessage = err.message;
+      } else if (typeof err === "object" && err !== null) {
+        try {
+          errorMessage = getErrorMessage(err);
+        } catch {
+          errorMessage = JSON.stringify(err, null, 2);
+        }
+      }
+      setError(errorMessage);
     }
   };
 

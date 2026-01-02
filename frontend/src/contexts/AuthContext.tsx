@@ -194,10 +194,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    */
   const register = useCallback(
     async (data: RegisterRequest) => {
+      let userData: User | null = null;
       try {
-        const userData = await apiRegister(data);
+        userData = await apiRegister(data);
+      } catch (error: any) {
+        // Re-throw registration errors to be handled by the UI
+        console.error("Registration API error:", error);
+        if (error.response?.data?.detail) {
+          // Handle validation error detail
+          const detail = error.response.data.detail;
+          if (Array.isArray(detail)) {
+            // Validation errors array
+            throw new Error(detail.map((e: any) => e.msg || e).join(", "));
+          } else {
+            throw new Error(String(detail));
+          }
+        } else if (error instanceof Error) {
+          throw error;
+        } else {
+          throw new Error(String(error));
+        }
+      }
 
-        // After registration, login automatically
+      if (!userData) {
+        throw new Error("Registration failed: No user data returned");
+      }
+
+      // After registration, login automatically
+      try {
         const tokens = await apiLogin({
           email: data.email,
           password: data.password,
@@ -205,8 +229,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         storeAuth(tokens, userData);
         router.push("/dashboard");
-      } catch (error) {
-        throw error;
+      } catch (loginError: any) {
+        // If auto-login fails, redirect to login page
+        console.error("Auto-login failed after registration:", loginError);
+        if (loginError.response?.data?.detail) {
+          router.push(`/login?registered=true&message=${encodeURIComponent(loginError.response.data.detail)}`);
+        } else {
+          router.push("/login?registered=true");
+        }
       }
     },
     [storeAuth, router]

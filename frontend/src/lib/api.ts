@@ -77,12 +77,20 @@ export function getAuthToken(): string | null {
 
 /**
  * Extract error message from API error response.
+ * Always returns a string for safe rendering in React.
  */
 export function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
-    const axiosError = error as AxiosError<APIError>;
-    if (axiosError.response?.data?.detail) {
-      return axiosError.response.data.detail;
+    const axiosError = error as AxiosError<{ detail: string | Array<{ msg: string; loc: string[] }> }>;
+    const detail = axiosError.response?.data?.detail;
+
+    if (detail) {
+      // Handle validation errors (array format)
+      if (Array.isArray(detail)) {
+        return detail.map((e) => e.msg).join(", ");
+      }
+      // Handle simple string errors
+      return String(detail);
     }
     if (axiosError.message) {
       return axiosError.message;
