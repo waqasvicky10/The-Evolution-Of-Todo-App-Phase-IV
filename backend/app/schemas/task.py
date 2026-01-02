@@ -4,7 +4,8 @@ Task request and response schemas.
 Pydantic models for task CRUD operations with validation.
 """
 
-from pydantic import BaseModel, constr, field_validator
+from datetime import datetime
+from pydantic import BaseModel, constr, field_validator, field_serializer
 from typing import List
 
 
@@ -79,8 +80,14 @@ class TaskResponse(BaseModel):
     description: str
     is_complete: bool
     user_id: int
-    created_at: str
-    updated_at: str
+    created_at: datetime
+    updated_at: datetime
+
+    @field_serializer("created_at", "updated_at")
+    @classmethod
+    def serialize_datetime(cls, v: datetime) -> str:
+        """Serialize datetime to ISO string format."""
+        return v.isoformat()
 
     class Config:
         from_attributes = True  # Allows creation from SQLModel objects
