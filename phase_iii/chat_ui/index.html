@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Todo Chat - AI-Powered Todo Assistant</title>
+    <link rel="stylesheet" href="styles.css?v=6">
+</head>
+
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="chat-header">
+            <div class="header-content">
+                <h1>🤖 Todo Chat</h1>
+                <p class="subtitle">Your AI-Powered Todo Assistant</p>
+            </div>
+            <div class="user-info">
+                <span id="user-name">Guest User</span>
+                <button id="logout-btn" class="btn-secondary">Logout</button>
+            </div>
+        </header>
+
+        <!-- Login Screen -->
+        <!-- Login Screen -->
+        <div id="login-screen" class="login-screen">
+            <div class="login-box glass-card">
+                <div class="login-header">
+                    <div class="app-icon">🤖</div>
+                    <h2>Welcome to Todo Chat</h2>
+                    <p>Your Intelligent Personal Assistant</p>
+                </div>
+
+                <form id="login-form">
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input type="text" id="username" placeholder="Enter your username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" placeholder="••••••••" required>
+                    </div>
+
+                    <button type="submit" class="btn-primary btn-block">
+                        <span>Sign In</span>
+                        <span class="btn-icon">➜</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Chat Container -->
+        <div id="chat-container" class="chat-container" style="display: none;">
+            <!-- Messages Area -->
+            <div class="messages-container" id="messages-container">
+                <div class="welcome-message">
+                    <div class="welcome-icon">👋</div>
+                    <h3>Hello! I'm Todo Chat.</h3>
+                    <p>I can help you organize your life. What would you like to do?</p>
+                </div>
+            </div>
+
+            <!-- Quick Actions / Suggestions -->
+            <div class="suggestions-container" id="suggestions">
+                <button class="suggestion-chip" onclick="setInput('Add a task to ')">➕ Add Task</button>
+                <button class="suggestion-chip" onclick="sendMessage('Show my list')">📋 Show List</button>
+                <button class="suggestion-chip" onclick="setInput('Mark task 1 as done')">✅ Complete Task</button>
+                <button class="suggestion-chip" onclick="sendMessage('فہرست دکھائیں')">🇵🇰 Show Urdu List</button>
+            </div>
+
+            <!-- Input Area -->
+            <div class="input-container">
+                <form id="message-form">
+                    <div class="lang-popover-container">
+                        <button type="button" id="lang-btn" class="btn-tool" title="Change Language">
+                            <span id="current-lang-icon">🇺🇸</span>
+                        </button>
+                        <div class="lang-menu" id="lang-menu">
+                            <div class="lang-option active" data-lang="en">🇺🇸 English</div>
+                            <div class="lang-option" data-lang="ur">🇵🇰 Urdu</div>
+                        </div>
+                    </div>
+
+                    <input type="text" id="message-input" placeholder="Type your message..." autocomplete="off"
+                        disabled>
+
+                    <button type="button" id="voice-button" class="btn-voice" title="Voice input" disabled>
+                        <span id="voice-icon">🎤</span>
+                    </button>
+
+                    <button type="submit" id="send-button" class="btn-primary" disabled>
+                        <span id="send-icon">➤</span>
+                        <span id="loading-spinner" class="spinner" style="display: none;">⏳</span>
+                    </button>
+                </form>
+                <div class="input-footer">
+                    <span class="status-indicator" id="status-indicator">
+                        <span class="status-dot"></span>
+                        <span id="status-text">Ready</span>
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Error Toast -->
+        <div id="error-toast" class="error-toast" style="display: none;">
+            <span id="error-message"></span>
+            <button onclick="hideError()">×</button>
+        </div>
+    </div>
+
+    <script src="chat.js?v=6"></script>
+</body>
+
+</html>
