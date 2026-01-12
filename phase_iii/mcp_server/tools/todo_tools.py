@@ -25,7 +25,12 @@ logger = logging.getLogger(__name__)
 # Database path (shared with Phase II Streamlit app)
 # Ensure we use the one in the project root
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-DATABASE_PATH = os.path.join(PROJECT_ROOT, "todo.db")
+
+# Check for Vercel environment to use writable /tmp directory
+if os.environ.get("VERCEL"):
+    DATABASE_PATH = "/tmp/todo.db"
+else:
+    DATABASE_PATH = os.path.join(PROJECT_ROOT, "todo.db")
 
 
 def init_todo_tables():

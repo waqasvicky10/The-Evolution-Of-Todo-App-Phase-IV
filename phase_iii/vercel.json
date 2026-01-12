@@ -1,0 +1,16 @@
+{
+    "rewrites": [
+        {
+            "source": "/api/(.*)",
+            "destination": "/api/index.py"
+        },
+        {
+            "source": "/",
+            "destination": "/chat_ui/index.html"
+        },
+        {
+            "source": "/(.*)",
+            "destination": "/chat_ui/$1"
+        }
+    ]
+}
