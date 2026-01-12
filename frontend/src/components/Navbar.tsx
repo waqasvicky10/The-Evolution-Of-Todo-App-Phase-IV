@@ -29,6 +29,20 @@ export default function Navbar() {
                 Todo App
               </h1>
             </Link>
+            <div className="ml-10 flex items-baseline space-x-4">
+              <Link
+                href="/dashboard"
+                className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-indigo-600 hover:bg-gray-50 transition"
+              >
+                Dashboard
+              </Link>
+              <Link
+                href="/chat"
+                className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-indigo-600 hover:bg-gray-50 transition"
+              >
+                AI Chat
+              </Link>
+            </div>
           </div>
 
           {/* Right side - User info and logout */}

@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.api.routes import auth, tasks
+from app.routes import ai
 from app.database import init_db
 
 
@@ -43,6 +44,7 @@ app.add_middleware(
 # Include routers
 app.include_router(auth.router)
 app.include_router(tasks.router)
+app.include_router(ai.router)
 
 
 @app.get("/")

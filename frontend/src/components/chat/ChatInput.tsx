@@ -1,0 +1,167 @@
+"use client";
+
+import React, { useState, useRef, useEffect, useCallback } from "react";
+
+/**
+ * ChatInput component.
+ * 
+ * Handles user message input with auto-expanding textarea, send button,
+ * and voice input using browser-native Speech Recognition.
+ */
+
+interface ChatInputProps {
+    onSendMessage: (message: string) => void;
+    isLoading: boolean;
+}
+
+// Global type for SpeechRecognition to avoid TS errors
+declare global {
+    interface Window {
+        SpeechRecognition: any;
+        webkitSpeechRecognition: any;
+    }
+}
+
+export default function ChatInput({ onSendMessage, isLoading }: ChatInputProps) {
+    const [message, setMessage] = useState("");
+    const [isListening, setIsListening] = useState(false);
+    const [voiceLang, setVoiceLang] = useState<"en-US" | "ur-PK">("en-US");
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const recognitionRef = useRef<any>(null);
+
+    const handleSubmit = (e?: React.FormEvent) => {
+        e?.preventDefault();
+        if (message.trim() && !isLoading) {
+            onSendMessage(message.trim());
+            setMessage("");
+        }
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            handleSubmit();
+        }
+    };
+
+    // Initialize Speech Recognition
+    useEffect(() => {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (SpeechRecognition) {
+            recognitionRef.current = new SpeechRecognition();
+            recognitionRef.current.continuous = false;
+            recognitionRef.current.interimResults = false;
+
+            recognitionRef.current.onresult = (event: any) => {
+                const transcript = event.results[0][0].transcript;
+                setMessage((prev) => (prev ? `${prev} ${transcript}` : transcript));
+                setIsListening(false);
+            };
+
+            recognitionRef.current.onerror = (event: any) => {
+                console.error("Speech recognition error:", event.error);
+                setIsListening(false);
+            };
+
+            recognitionRef.current.onend = () => {
+                setIsListening(false);
+            };
+        }
+
+        return () => {
+            if (recognitionRef.current) {
+                recognitionRef.current.stop();
+            }
+        };
+    }, []);
+
+    const toggleListening = () => {
+        if (!recognitionRef.current) {
+            alert("Speech recognition is not supported in this browser.");
+            return;
+        }
+
+        if (isListening) {
+            recognitionRef.current.stop();
+            setIsListening(false);
+        } else {
+            recognitionRef.current.lang = voiceLang;
+            recognitionRef.current.start();
+            setIsListening(true);
+        }
+    };
+
+    const toggleLanguage = () => {
+        setVoiceLang((prev) => (prev === "en-US" ? "ur-PK" : "en-US"));
+    };
+
+    useEffect(() => {
+        if (textareaRef.current) {
+            textareaRef.current.style.height = "auto";
+            textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
+        }
+    }, [message]);
+
+    return (
+        <div className="p-4 bg-white border-t border-gray-200">
+            <div className="max-w-4xl mx-auto mb-2 flex justify-end space-x-2">
+                <button
+                    onClick={toggleLanguage}
+                    className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+                >
+                    🎤 {voiceLang === "en-US" ? "English (US)" : "Urdu (PK)"}
+                </button>
+            </div>
+            <form onSubmit={handleSubmit} className="relative max-w-4xl mx-auto flex items-end space-x-2">
+                <div className="flex-1 relative">
+                    <textarea
+                        ref={textareaRef}
+                        value={message}
+                        onChange={(e) => setMessage(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        placeholder={isListening ? "Listening..." : "Type or speak your message..."}
+                        className={`w-full p-3 pr-12 text-sm text-gray-900 bg-gray-50 rounded-2xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none overflow-y-auto transition-all duration-200 ease-in-out scrollbar-hide min-h-[44px] max-h-[200px] ${isListening ? "ring-2 ring-red-400 border-transparent animate-pulse" : ""
+                            }`}
+                        rows={1}
+                        disabled={isLoading}
+                    />
+                </div>
+
+                <button
+                    type="button"
+                    onClick={toggleListening}
+                    disabled={isLoading}
+                    className={`p-3 rounded-xl transition-all duration-200 shadow-sm ${isListening
+                            ? "bg-red-500 text-white animate-pulse"
+                            : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                        }`}
+                    title={isListening ? "Stop listening" : "Start voice input"}
+                >
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m8 0h-4m-4-8a3 3 0 013-3V5a3 3 0 116 0v6a3 3 0 01-3 3 3 3 0 01-3-3z"></path>
+                    </svg>
+                </button>
+
+                <button
+                    type="submit"
+                    disabled={!message.trim() || isLoading}
+                    className={`p-3 rounded-xl transition-all duration-200 shadow-sm ${!message.trim() || isLoading
+                            ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                            : "bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-md active:scale-95"
+                        }`}
+                >
+                    {isLoading ? (
+                        <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    ) : (
+                        <svg className="h-5 w-5 transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                        </svg>
+                    )}
+                </button>
+            </form>
+        </div>
+    );
+}

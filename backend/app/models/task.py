@@ -6,7 +6,7 @@ Defines the Task entity with SQLModel for database operations.
 
 from sqlmodel import SQLModel, Field, Relationship
 from datetime import datetime
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, List
 
 if TYPE_CHECKING:
     from app.models.user import User
@@ -25,6 +25,14 @@ class Task(SQLModel, table=True):
         user_id: Foreign key to users table (indexed)
         created_at: Timestamp when task was created
         updated_at: Timestamp when task was last updated
+        
+        # AI-enhanced fields
+        category: AI-determined task category
+        priority: AI-determined priority level
+        estimated_duration: AI-estimated completion time
+        ai_tags: AI-generated tags for organization
+        ai_suggestions: AI suggestions for task improvement
+        
         user: Relationship to the task's owner
     """
 
@@ -36,6 +44,13 @@ class Task(SQLModel, table=True):
     user_id: int = Field(foreign_key="users.id", index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    # AI-enhanced fields
+    category: Optional[str] = Field(default=None, max_length=50)
+    priority: Optional[str] = Field(default=None, max_length=20)  # high, medium, low
+    estimated_duration: Optional[str] = Field(default=None, max_length=50)
+    ai_tags: Optional[str] = Field(default=None, max_length=500)  # JSON string of tags
+    ai_suggestions: Optional[str] = Field(default=None, max_length=1000)  # JSON string of suggestions
 
     # Relationship to user
     user: "User" = Relationship(back_populates="tasks")

@@ -22,12 +22,16 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: str = "http://localhost:3000"
 
+    # OpenAI Integration
+    OPENAI_API_KEY: str = ""
+
     # Environment
     ENVIRONMENT: str = "development"
 
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"
 
 
 settings = Settings()

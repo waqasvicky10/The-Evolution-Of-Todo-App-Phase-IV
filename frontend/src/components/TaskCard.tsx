@@ -4,7 +4,7 @@
  * TaskCard component.
  *
  * Displays a single task with toggle, edit, and delete functionality.
- * Supports inline editing mode.
+ * Supports inline editing mode and displays AI-enhanced metadata.
  */
 
 import { useState } from "react";
@@ -61,6 +61,30 @@ export default function TaskCard({
     }
   };
 
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'high': return 'text-red-600 bg-red-50 border-red-200';
+      case 'medium': return 'text-yellow-600 bg-yellow-50 border-yellow-200';
+      case 'low': return 'text-green-600 bg-green-50 border-green-200';
+      default: return 'text-gray-600 bg-gray-50 border-gray-200';
+    }
+  };
+
+  const getCategoryIcon = (category: string) => {
+    switch (category) {
+      case 'work': return '💼';
+      case 'personal': return '👤';
+      case 'health': return '🏥';
+      case 'learning': return '📚';
+      case 'shopping': return '🛒';
+      default: return '📝';
+    }
+  };
+
+  // Parse AI metadata
+  const aiTags = task.ai_tags ? JSON.parse(task.ai_tags) : [];
+  const aiSuggestions = task.ai_suggestions ? JSON.parse(task.ai_suggestions) : [];
+
   const cardClassName = task.is_complete
     ? "bg-gray-50 rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition"
     : "bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition";
@@ -107,55 +131,110 @@ export default function TaskCard({
         </div>
       ) : (
         // View mode
-        <div className="flex items-center gap-3">
-          {/* Checkbox */}
-          <input
-            type="checkbox"
-            checked={task.is_complete}
-            onChange={() => onToggle(task.id)}
-            disabled={isLoading}
-            className="h-5 w-5 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer disabled:cursor-not-allowed"
-            title={task.is_complete ? "Mark as incomplete" : "Mark as complete"}
-          />
-
-          {/* Task description */}
-          <span
-            className={`flex-1 ${
-              task.is_complete ? "text-gray-500 line-through" : "text-gray-900"
-            }`}
-          >
-            {task.description}
-          </span>
-
-          {/* Action buttons */}
-          <div className="flex gap-2">
-            {!task.is_complete && (
-              <button
-                onClick={handleStartEdit}
-                disabled={isLoading}
-                className="px-3 py-1 text-sm text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-md transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Edit
-              </button>
-            )}
-            <button
-              onClick={handleDelete}
+        <div>
+          <div className="flex items-center gap-3 mb-3">
+            {/* Checkbox */}
+            <input
+              type="checkbox"
+              checked={task.is_complete}
+              onChange={() => onToggle(task.id)}
               disabled={isLoading}
-              className="px-3 py-1 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition disabled:opacity-50 disabled:cursor-not-allowed"
+              className="h-5 w-5 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer disabled:cursor-not-allowed"
+              title={task.is_complete ? "Mark as incomplete" : "Mark as complete"}
+            />
+
+            {/* Task description */}
+            <span
+              className={`flex-1 ${
+                task.is_complete ? "text-gray-500 line-through" : "text-gray-900"
+              }`}
             >
-              Delete
-            </button>
+              {task.description}
+            </span>
+
+            {/* Action buttons */}
+            <div className="flex gap-2">
+              {!task.is_complete && (
+                <button
+                  onClick={handleStartEdit}
+                  disabled={isLoading}
+                  className="px-3 py-1 text-sm text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-md transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Edit
+                </button>
+              )}
+              <button
+                onClick={handleDelete}
+                disabled={isLoading}
+                className="px-3 py-1 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+
+          {/* AI Metadata */}
+          {(task.category || task.priority || task.estimated_duration || aiTags.length > 0) && (
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              {/* Category */}
+              {task.category && (
+                <div className="flex items-center text-sm text-gray-600">
+                  <span className="mr-1">{getCategoryIcon(task.category)}</span>
+                  <span className="capitalize">{task.category}</span>
+                </div>
+              )}
+
+              {/* Priority */}
+              {task.priority && (
+                <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full capitalize border ${getPriorityColor(task.priority)}`}>
+                  {task.priority}
+                </span>
+              )}
+
+              {/* Duration */}
+              {task.estimated_duration && (
+                <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+                  ⏱️ {task.estimated_duration}
+                </span>
+              )}
+
+              {/* AI Tags */}
+              {aiTags.map((tag: string, index: number) => (
+                <span
+                  key={index}
+                  className="inline-flex px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded-full"
+                >
+                  #{tag}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* AI Suggestions (collapsed by default) */}
+          {aiSuggestions.length > 0 && !task.is_complete && (
+            <details className="mt-2">
+              <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-700">
+                💡 AI Suggestions ({aiSuggestions.length})
+              </summary>
+              <div className="mt-2 pl-4 border-l-2 border-blue-200">
+                {aiSuggestions.map((suggestion: string, index: number) => (
+                  <p key={index} className="text-xs text-gray-600 mb-1">
+                    • {suggestion}
+                  </p>
+                ))}
+              </div>
+            </details>
+          )}
+
+          {/* Task metadata (timestamps) */}
+          <div className="mt-2 text-xs text-gray-400 flex gap-4">
+            <span>Created: {new Date(task.created_at).toLocaleDateString()}</span>
+            {task.updated_at !== task.created_at && (
+              <span>Updated: {new Date(task.updated_at).toLocaleDateString()}</span>
+            )}
           </div>
         </div>
       )}
-
-      {/* Task metadata (timestamps) */}
-      <div className="mt-2 text-xs text-gray-400 flex gap-4">
-        <span>Created: {new Date(task.created_at).toLocaleDateString()}</span>
-        {task.updated_at !== task.created_at && (
-          <span>Updated: {new Date(task.updated_at).toLocaleDateString()}</span>
-        )}
-      </div>
     </div>
   );
 }

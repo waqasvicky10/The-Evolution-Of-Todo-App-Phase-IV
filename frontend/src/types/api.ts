@@ -74,6 +74,13 @@ export interface Task {
   user_id: number;
   created_at: string;
   updated_at: string;
+  
+  // AI-enhanced fields
+  category?: string;
+  priority?: string;
+  estimated_duration?: string;
+  ai_tags?: string; // JSON string of tags array
+  ai_suggestions?: string; // JSON string of suggestions array
 }
 
 /**
@@ -81,6 +88,11 @@ export interface Task {
  */
 export interface TaskCreate {
   description: string;
+  category?: string;
+  priority?: string;
+  estimated_duration?: string;
+  ai_tags?: string;
+  ai_suggestions?: string;
 }
 
 /**

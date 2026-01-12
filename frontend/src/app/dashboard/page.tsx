@@ -13,6 +13,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTasks, useCreateTask, useUpdateTask, useDeleteTask, useToggleTask } from "@/hooks/useTasks";
 import Navbar from "@/components/Navbar";
 import TaskCard from "@/components/TaskCard";
+import SmartTaskCreator from "@/components/SmartTaskCreator";
+import TaskSuggestions from "@/components/TaskSuggestions";
 
 
 export default function DashboardPage() {
@@ -51,18 +53,22 @@ export default function DashboardPage() {
     return null;
   }
 
-  const handleCreateTask = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCreateTask = async (description: string, metadata?: any) => {
     setError(null);
 
-    if (!newTaskDescription.trim()) {
+    if (!description.trim()) {
       setError("Task description cannot be empty");
       return;
     }
 
-    const task = await createTask({ description: newTaskDescription.trim() });
+    // Create task data with AI metadata if provided
+    const taskData = {
+      description: description.trim(),
+      ...metadata
+    };
+
+    const task = await createTask(taskData);
     if (task) {
-      setNewTaskDescription("");
       refetch();
     }
   };
@@ -108,29 +114,22 @@ export default function DashboardPage() {
         </div>
 
         {/* Create Task Form */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Create New Task</h3>
-          <form onSubmit={handleCreateTask} className="flex gap-3">
-            <input
-              type="text"
-              value={newTaskDescription}
-              onChange={(e) => setNewTaskDescription(e.target.value)}
-              placeholder="Enter task description..."
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
-              disabled={createLoading}
-            />
-            <button
-              type="submit"
-              disabled={createLoading}
-              className="px-6 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-300 disabled:opacity-50 disabled:cursor-not-allowed transition"
-            >
-              {createLoading ? "Adding..." : "Add Task"}
-            </button>
-          </form>
-          {error && (
-            <div className="mt-3 text-sm text-red-600">{error}</div>
-          )}
-        </div>
+        <SmartTaskCreator 
+          onCreateTask={handleCreateTask}
+          isLoading={createLoading}
+        />
+
+        {/* AI Task Suggestions */}
+        <TaskSuggestions
+          onCreateTask={handleCreateTask}
+          userContext={{
+            total_tasks: tasks.length,
+            completed_tasks: completedTasks.length,
+            active_tasks: incompleteTasks.length,
+            recent_categories: tasks.slice(0, 5).map(t => t.category).filter(Boolean)
+          }}
+          isVisible={true}
+        />
 
         {/* Tasks Error */}
         {tasksError && (
