@@ -1,40 +1,23 @@
 """
-Phase III Todo Chat App - Streamlit Deployment
-AI-Powered Todo Assistant (Mock Mode - No API Key Required)
-
-This is a user-friendly todo chat app that works without any API keys.
-Uses intelligent pattern matching to understand your commands.
+Simple Todo App - Streamlit
+A clean, user-friendly todo application with authentication and task management.
+No API keys required - works entirely with local database.
 """
 
 import streamlit as st
+import sqlite3
+import hashlib
 import os
-import sys
-from pathlib import Path
-import traceback
-
-# Add phase_iii to path so imports work
-project_root = Path(__file__).parent.absolute()
-phase_iii_path = project_root / "phase_iii"
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
-if str(phase_iii_path) not in sys.path:
-    sys.path.insert(0, str(phase_iii_path))
+from datetime import datetime
+from typing import Optional
 
 # Page configuration
 st.set_page_config(
-    page_title="Todo Chat - AI Assistant",
+    page_title="Todo App",
     page_icon="✅",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="centered",
+    initial_sidebar_state="collapsed"
 )
-
-# Initialize session state
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-if "user_id" not in st.session_state:
-    st.session_state.user_id = 1  # Default user for demo
-if "conversation_history" not in st.session_state:
-    st.session_state.conversation_history = []
 
 # Database path - use writable location for Streamlit Cloud
 if os.path.exists("/tmp"):
@@ -44,347 +27,422 @@ elif os.path.exists("/mount/src"):
 else:
     DB_PATH = "todo.db"
 
-# Set database path in environment
-os.environ["DATABASE_PATH"] = DB_PATH
 
-# Ensure MockProvider is used (no API key needed)
-os.environ.pop("OPENAI_API_KEY", None)
+def init_database():
+    """Initialize the SQLite database with users and tasks tables."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
 
-# Initialize database tables
-db_ready = False
-try:
-    from phase_iii.persistence.repositories.conversation_repo import init_conversation_tables
-    from phase_iii.persistence.repositories.tool_call_repo import init_tool_call_tables
-    from phase_iii.mcp_server.tools.todo_tools import init_todo_tables
-    
-    # Update database path in modules
-    import phase_iii.persistence.repositories.conversation_repo as conv_repo
-    import phase_iii.mcp_server.tools.todo_tools as todo_tools_module
-    conv_repo.DATABASE_PATH = DB_PATH
-    todo_tools_module.DATABASE_PATH = DB_PATH
-    
-    init_conversation_tables()
-    init_tool_call_tables()
-    init_todo_tables()
-    db_ready = True
-except Exception as e:
-    db_ready = False
-    error_trace = traceback.format_exc()
-    st.warning(f"⚠️ Database initialization: {str(e)}")
-    with st.expander("Database Error Details"):
-        st.code(error_trace)
-
-# Import agent components
-AGENT_AVAILABLE = False
-create_agent_func = None
-get_mcp_tool_definitions_func = None
-get_agent_config_func = None
-store_message_func = None
-MessageRole_enum = None
-todo_tools_dict = {}
-
-try:
-    from phase_iii.agent import create_agent, get_mcp_tool_definitions
-    from phase_iii.agent.config.agent_config import get_agent_config
-    create_agent_func = create_agent
-    get_mcp_tool_definitions_func = get_mcp_tool_definitions
-    get_agent_config_func = get_agent_config
-    AGENT_AVAILABLE = True
-except Exception as e:
-    error_trace = traceback.format_exc()
-    st.error(f"❌ Failed to load agent: {str(e)}")
-    with st.expander("Agent Import Error Details"):
-        st.code(error_trace)
-
-try:
-    from phase_iii.persistence.repositories.conversation_repo import store_message
-    from phase_iii.persistence.models.conversation import MessageRole
-    store_message_func = store_message
-    MessageRole_enum = MessageRole
-except Exception as e:
-    pass  # Optional - app works without persistence
-
-try:
-    import asyncio
-    from phase_iii.mcp_server.tools.todo_tools import (
-        create_todo_tool, list_todos_tool, update_todo_tool,
-        delete_todo_tool, get_todo_tool
-    )
-    
-    # Create synchronous wrappers for async tools
-    # Tools expect a single 'arguments' dict parameter
-    def sync_create_todo(**kwargs):
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(create_todo_tool(kwargs))
-    
-    def sync_list_todos(**kwargs):
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(list_todos_tool(kwargs))
-    
-    def sync_update_todo(**kwargs):
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(update_todo_tool(kwargs))
-    
-    def sync_delete_todo(**kwargs):
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(delete_todo_tool(kwargs))
-    
-    def sync_get_todo(**kwargs):
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(get_todo_tool(kwargs))
-    
-    todo_tools_dict = {
-        "create_todo": sync_create_todo,
-        "list_todos": sync_list_todos,
-        "update_todo": sync_update_todo,
-        "delete_todo": sync_delete_todo,
-        "get_todo": sync_get_todo,
-    }
-except Exception as e:
-    error_trace = traceback.format_exc()
-    st.error(f"❌ Failed to load todo tools: {str(e)}")
-    with st.expander("Tools Import Error Details"):
-        st.code(error_trace)
-
-
-def process_message(user_message: str):
-    """Process user message and return agent response."""
-    if not AGENT_AVAILABLE:
-        return {
-            "response_text": "I'm having trouble connecting. Please refresh the page and try again.",
-            "tool_calls": [],
-            "requires_tool_execution": False,
-            "error": "Agent not available"
-        }
-    
-    try:
-        # Always use MockProvider (no API key needed)
-        agent = create_agent_func(api_key="mock", config=get_agent_config_func())
-        tools = get_mcp_tool_definitions_func()
-        
-        # Get conversation history
-        history = [
-            {"role": msg["role"], "content": msg["content"]}
-            for msg in st.session_state.conversation_history[-10:]
-        ]
-        
-        # Process message
-        agent_response = agent.process_message(
-            user_message=user_message,
-            conversation_history=history,
-            user_id=st.session_state.user_id,
-            tools=tools
+    # Create users table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL
         )
-        
-        # Execute tool calls if needed
-        if agent_response.get("requires_tool_execution") and agent_response.get("tool_calls"):
-            tool_results = []
-            for tool_call in agent_response["tool_calls"]:
-                tool_name = tool_call.get("name")
-                tool_input = tool_call.get("input", {})
-                
-                if tool_name in todo_tools_dict and todo_tools_dict[tool_name]:
-                    try:
-                        # Fix input parameter names if needed
-                        if tool_name == "create_todo":
-                            # Tool expects "title" parameter, which is correct
-                            # Ensure user_id is set
-                            if "user_id" not in tool_input:
-                                tool_input["user_id"] = st.session_state.user_id
-                            # Tool will use "title" and map it to "description" in DB
-                        
-                        elif tool_name in ["update_todo", "delete_todo", "get_todo"]:
-                            # Ensure user_id is set
-                            tool_input["user_id"] = st.session_state.user_id
-                            # Fix parameter names
-                            if "todo_id" not in tool_input and "id" in tool_input:
-                                tool_input["todo_id"] = tool_input.pop("id")
-                        
-                        elif tool_name == "list_todos":
-                            tool_input["user_id"] = st.session_state.user_id
-                        
-                        result = todo_tools_dict[tool_name](**tool_input)
-                        tool_results.append({
-                            "tool_use_id": tool_call.get("tool_use_id", ""),
-                            "result": result
-                        })
-                    except Exception as e:
-                        error_trace = traceback.format_exc()
-                        tool_results.append({
-                            "tool_use_id": tool_call.get("tool_use_id", ""),
-                            "result": {"error": str(e), "trace": error_trace}
-                        })
-            
-            # Process tool results
-            if tool_results:
-                try:
-                    final_response = agent.process_tool_results(
-                        tool_results=tool_results,
-                        user_id=st.session_state.user_id
-                    )
-                    agent_response["response_text"] = final_response.get("response_text", agent_response.get("response_text", ""))
-                except Exception as e:
-                    error_trace = traceback.format_exc()
-                    # Include error in response
-                    agent_response["response_text"] = f"Task operation completed, but encountered an issue: {str(e)}"
-                    agent_response["error_trace"] = error_trace
-        
-        return agent_response
-
-    except Exception as e:
-        error_trace = traceback.format_exc()
-        return {
-            "response_text": f"I'm sorry, I encountered an error: {str(e)}",
-            "tool_calls": [],
-            "requires_tool_execution": False,
-            "error": str(e),
-            "error_trace": error_trace
-        }
-
-
-# Main UI
-st.title("✅ Todo Chat Assistant")
-st.markdown("**Your friendly todo management assistant - No API key required!**")
-
-# Welcome message for first-time users
-if len(st.session_state.messages) == 0:
-    st.info("👋 **Welcome!** I can help you manage your todos. Try saying things like:\n- \"Add task buy groceries\"\n- \"List my tasks\"\n- \"Mark task 1 as complete\"\n- \"Delete task 2\"")
-
-# Sidebar
-with st.sidebar:
-    st.header("⚙️ Settings")
-    
-    st.success("✅ **Mock Mode Active**\n\nNo API key needed! This app uses intelligent pattern matching to understand your commands.")
-
-    st.markdown("---")
-    st.markdown("### 📝 How to Use")
-    st.markdown("""
-    **Create Tasks:**
-    - "Add task buy groceries"
-    - "Create a task to call mom"
-    - "Remind me to finish the report"
-    
-    **View Tasks:**
-    - "List my tasks"
-    - "Show all todos"
-    - "What tasks do I have?"
-    
-    **Complete Tasks:**
-    - "Mark task 1 as complete"
-    - "ID 1 task completed"
-    - "Task 2 is done"
-    
-    **Delete Tasks:**
-    - "Delete task 1"
-    - "Remove task 2"
-    - "ID 3 delete"
-    
-    **Update Tasks:**
-    - "Update task 1 to buy milk"
-    - "Change task 2 to call dentist"
     """)
 
-    st.markdown("---")
-    st.markdown("### 🌍 Languages")
-    st.markdown("Supports **English** and **Urdu (اردو)**")
+    # Create tasks table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            description TEXT NOT NULL,
+            completed BOOLEAN DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    """)
+
+    # Create index for faster queries
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id)
+    """)
+
+    conn.commit()
+    conn.close()
+
+
+def get_db_connection():
+    """Get a database connection."""
+    return sqlite3.connect(DB_PATH)
+
+
+def hash_password(password: str) -> str:
+    """Hash a password using SHA256."""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+
+def verify_password(password: str, password_hash: str) -> bool:
+    """Verify a password against its hash."""
+    return hash_password(password) == password_hash
+
+
+def register_user(email: str, password: str) -> tuple[bool, str]:
+    """Register a new user."""
+    if not email or not password:
+        return False, "Email and password are required"
     
-    st.markdown("---")
-    st.markdown(f"**Status:** {'✅ Ready' if AGENT_AVAILABLE and db_ready else '⚠️ Issues detected'}")
-    st.markdown(f"**Database:** {DB_PATH}")
+    if len(password) < 8:
+        return False, "Password must be at least 8 characters long"
     
-    st.markdown("---")
-    if st.button("🗑️ Clear Chat", use_container_width=True):
-        st.session_state.messages = []
-        st.session_state.conversation_history = []
+    if "@" not in email or "." not in email:
+        return False, "Please enter a valid email address"
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Check if email already exists
+        cursor.execute("SELECT id FROM users WHERE email = ?", (email,))
+        if cursor.fetchone():
+            conn.close()
+            return False, "An account with this email already exists"
+        
+        # Create new user
+        password_hash = hash_password(password)
+        created_at = datetime.now().isoformat()
+        cursor.execute(
+            "INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)",
+            (email, password_hash, created_at)
+        )
+        conn.commit()
+        conn.close()
+        return True, "Registration successful! Please log in."
+    except Exception as e:
+        return False, f"Registration failed: {str(e)}"
+
+
+def login_user(email: str, password: str) -> tuple[bool, Optional[int], str]:
+    """Login a user and return user_id if successful."""
+    if not email or not password:
+        return False, None, "Email and password are required"
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, password_hash FROM users WHERE email = ?", (email,))
+        user = cursor.fetchone()
+        conn.close()
+        
+        if not user:
+            return False, None, "Invalid email or password"
+        
+        user_id, password_hash = user
+        if verify_password(password, password_hash):
+            return True, user_id, "Login successful!"
+        else:
+            return False, None, "Invalid email or password"
+    except Exception as e:
+        return False, None, f"Login failed: {str(e)}"
+
+
+def get_user_tasks(user_id: int) -> list:
+    """Get all tasks for a user."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, description, completed, created_at FROM tasks WHERE user_id = ? ORDER BY id DESC",
+            (user_id,)
+        )
+        tasks = cursor.fetchall()
+        conn.close()
+        return [{"id": t[0], "description": t[1], "completed": bool(t[2]), "created_at": t[3]} for t in tasks]
+    except Exception as e:
+        st.error(f"Error loading tasks: {str(e)}")
+        return []
+
+
+def create_task(user_id: int, description: str) -> tuple[bool, str]:
+    """Create a new task."""
+    if not description or not description.strip():
+        return False, "Task description cannot be empty"
+    
+    if len(description) > 500:
+        return False, "Task description too long (max 500 characters)"
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        now = datetime.now().isoformat()
+        cursor.execute(
+            "INSERT INTO tasks (user_id, description, completed, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+            (user_id, description.strip(), False, now, now)
+        )
+        conn.commit()
+        conn.close()
+        return True, "Task created successfully!"
+    except Exception as e:
+        return False, f"Failed to create task: {str(e)}"
+
+
+def update_task(user_id: int, task_id: int, description: Optional[str] = None, completed: Optional[bool] = None) -> tuple[bool, str]:
+    """Update a task."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Verify task belongs to user
+        cursor.execute("SELECT id FROM tasks WHERE id = ? AND user_id = ?", (task_id, user_id))
+        if not cursor.fetchone():
+            conn.close()
+            return False, "Task not found"
+        
+        updates = []
+        params = []
+        
+        if description is not None:
+            if not description.strip():
+                conn.close()
+                return False, "Task description cannot be empty"
+            if len(description) > 500:
+                conn.close()
+                return False, "Task description too long (max 500 characters)"
+            updates.append("description = ?")
+            params.append(description.strip())
+        
+        if completed is not None:
+            updates.append("completed = ?")
+            params.append(completed)
+        
+        if not updates:
+            conn.close()
+            return False, "No changes to update"
+        
+        updates.append("updated_at = ?")
+        params.append(datetime.now().isoformat())
+        params.append(task_id)
+        params.append(user_id)
+        
+        cursor.execute(
+            f"UPDATE tasks SET {', '.join(updates)} WHERE id = ? AND user_id = ?",
+            params
+        )
+        conn.commit()
+        conn.close()
+        return True, "Task updated successfully!"
+    except Exception as e:
+        return False, f"Failed to update task: {str(e)}"
+
+
+def delete_task(user_id: int, task_id: int) -> tuple[bool, str]:
+    """Delete a task."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Verify task belongs to user
+        cursor.execute("SELECT id FROM tasks WHERE id = ? AND user_id = ?", (task_id, user_id))
+        if not cursor.fetchone():
+            conn.close()
+            return False, "Task not found"
+        
+        cursor.execute("DELETE FROM tasks WHERE id = ? AND user_id = ?", (task_id, user_id))
+        conn.commit()
+        conn.close()
+        return True, "Task deleted successfully!"
+    except Exception as e:
+        return False, f"Failed to delete task: {str(e)}"
+
+
+# Initialize database
+init_database()
+
+# Initialize session state
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+if "user_id" not in st.session_state:
+    st.session_state.user_id = None
+if "user_email" not in st.session_state:
+    st.session_state.user_email = None
+if "page" not in st.session_state:
+    st.session_state.page = "login"
+
+# Get query params for navigation
+query_params = st.query_params
+if "page" in query_params:
+    st.session_state.page = query_params["page"]
+
+# Main App Logic
+if st.session_state.logged_in:
+    # User is logged in - show dashboard
+    st.title("✅ My Todo List")
+    st.markdown(f"**Welcome, {st.session_state.user_email}!**")
+    
+    # Logout button
+    if st.button("🚪 Logout", type="secondary"):
+        st.session_state.logged_in = False
+        st.session_state.user_id = None
+        st.session_state.user_email = None
+        st.session_state.page = "login"
         st.rerun()
-
-# Display chat messages
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-
-# Chat input
-if prompt := st.chat_input("Type your message here..."):
-    # Add user message
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    st.session_state.conversation_history.append({"role": "user", "content": prompt})
     
-    # Store user message (optional)
-    if store_message_func and MessageRole_enum:
-        try:
-            store_message_func(
-                user_id=st.session_state.user_id,
-                role=MessageRole_enum.USER,
-                content=prompt
-            )
-        except:
-            pass  # Continue even if storage fails
+    st.markdown("---")
     
-    # Display user message
-    with st.chat_message("user"):
-        st.markdown(prompt)
-    
-    # Process message
-    with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            response = process_message(prompt)
-            
-            response_text = response.get("response_text", "I'm sorry, I didn't understand that. Can you try rephrasing?")
-            tool_calls = response.get("tool_calls", [])
-            error_trace = response.get("error_trace")
-            error = response.get("error")
-            
-            # Show error details if available
-            if error_trace:
-                st.error("❌ An error occurred. Details below:")
-                with st.expander("🔍 Error Details (Click to see)", expanded=False):
-                    st.code(error_trace)
-            
-            # Display response
-            if error and "error" in response_text.lower():
-                st.error(response_text)
+    # Create new task
+    with st.form("create_task_form", clear_on_submit=True):
+        st.subheader("➕ Add New Task")
+        task_description = st.text_input("Task Description", placeholder="Enter your task here...", max_chars=500)
+        submit_task = st.form_submit_button("Add Task", type="primary", use_container_width=True)
+        
+        if submit_task:
+            if task_description and task_description.strip():
+                success, message = create_task(st.session_state.user_id, task_description)
+                if success:
+                    st.success(message)
+                    st.rerun()
+                else:
+                    st.error(message)
             else:
-                st.markdown(response_text)
+                st.error("Please enter a task description")
     
-    # Add assistant message
-    st.session_state.messages.append({
-        "role": "assistant",
-        "content": response_text,
-        "tool_calls": tool_calls
-    })
-    st.session_state.conversation_history.append({"role": "assistant", "content": response_text})
+    st.markdown("---")
     
-    # Store assistant message (optional)
-    if store_message_func and MessageRole_enum:
-        try:
-            store_message_func(
-                user_id=st.session_state.user_id,
-                role=MessageRole_enum.ASSISTANT,
-                content=response_text
-            )
-        except:
-            pass  # Continue even if storage fails
+    # Display tasks
+    tasks = get_user_tasks(st.session_state.user_id)
+    
+    if tasks:
+        st.subheader(f"📋 Your Tasks ({len(tasks)} total)")
+        
+        # Active tasks
+        active_tasks = [t for t in tasks if not t["completed"]]
+        if active_tasks:
+            st.markdown("### 🔄 Active Tasks")
+            for task in active_tasks:
+                with st.container():
+                    col1, col2, col3, col4 = st.columns([1, 8, 1, 1])
+                    with col1:
+                        if st.button("✅", key=f"complete_{task['id']}", help="Mark as complete"):
+                            update_task(st.session_state.user_id, task["id"], completed=True)
+                            st.rerun()
+                    with col2:
+                        st.write(f"**{task['description']}**")
+                    with col3:
+                        if st.button("✏️", key=f"edit_{task['id']}", help="Edit task"):
+                            st.session_state[f"editing_{task['id']}"] = True
+                            st.rerun()
+                    with col4:
+                        if st.button("🗑️", key=f"delete_{task['id']}", help="Delete task"):
+                            delete_task(st.session_state.user_id, task["id"])
+                            st.rerun()
+                    
+                    # Edit form
+                    if st.session_state.get(f"editing_{task['id']}", False):
+                        with st.form(f"edit_form_{task['id']}"):
+                            new_description = st.text_input("Edit Task", value=task["description"], key=f"edit_input_{task['id']}")
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                if st.form_submit_button("💾 Save", use_container_width=True):
+                                    success, msg = update_task(st.session_state.user_id, task["id"], description=new_description)
+                                    if success:
+                                        st.session_state[f"editing_{task['id']}"] = False
+                                        st.rerun()
+                                    else:
+                                        st.error(msg)
+                            with col2:
+                                if st.form_submit_button("❌ Cancel", use_container_width=True):
+                                    st.session_state[f"editing_{task['id']}"] = False
+                                    st.rerun()
+                    st.markdown("---")
+        
+        # Completed tasks
+        completed_tasks = [t for t in tasks if t["completed"]]
+        if completed_tasks:
+            st.markdown("### ✅ Completed Tasks")
+            for task in completed_tasks:
+                with st.container():
+                    col1, col2, col3, col4 = st.columns([1, 8, 1, 1])
+                    with col1:
+                        if st.button("↩️", key=f"undo_{task['id']}", help="Mark as incomplete"):
+                            update_task(st.session_state.user_id, task["id"], completed=False)
+                            st.rerun()
+                    with col2:
+                        st.write(f"~~{task['description']}~~")
+                    with col3:
+                        if st.button("✏️", key=f"edit_c_{task['id']}", help="Edit task"):
+                            st.session_state[f"editing_{task['id']}"] = True
+                            st.rerun()
+                    with col4:
+                        if st.button("🗑️", key=f"delete_c_{task['id']}", help="Delete task"):
+                            delete_task(st.session_state.user_id, task["id"])
+                            st.rerun()
+                    
+                    # Edit form for completed tasks
+                    if st.session_state.get(f"editing_{task['id']}", False):
+                        with st.form(f"edit_form_c_{task['id']}"):
+                            new_description = st.text_input("Edit Task", value=task["description"], key=f"edit_input_c_{task['id']}")
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                if st.form_submit_button("💾 Save", use_container_width=True):
+                                    success, msg = update_task(st.session_state.user_id, task["id"], description=new_description)
+                                    if success:
+                                        st.session_state[f"editing_{task['id']}"] = False
+                                        st.rerun()
+                                    else:
+                                        st.error(msg)
+                            with col2:
+                                if st.form_submit_button("❌ Cancel", use_container_width=True):
+                                    st.session_state[f"editing_{task['id']}"] = False
+                                    st.rerun()
+                    st.markdown("---")
+    else:
+        st.info("📝 No tasks yet. Create your first task above!")
+    
+else:
+    # User is not logged in - show login/register
+    if st.session_state.page == "signup" or st.button("📝 Don't have an account? Sign up"):
+        st.session_state.page = "signup"
+        st.title("📝 Sign Up")
+        
+        with st.form("signup_form"):
+            email = st.text_input("Email", placeholder="your.email@example.com")
+            password = st.text_input("Password", type="password", placeholder="At least 8 characters")
+            password_confirm = st.text_input("Confirm Password", type="password")
+            submit = st.form_submit_button("Sign Up", type="primary", use_container_width=True)
+            
+            if submit:
+                if password != password_confirm:
+                    st.error("Passwords do not match")
+                else:
+                    success, message = register_user(email, password)
+                    if success:
+                        st.success(message)
+                        st.session_state.page = "login"
+                        st.rerun()
+                    else:
+                        st.error(message)
+        
+        if st.button("← Back to Login"):
+            st.session_state.page = "login"
+            st.rerun()
+    
+    else:
+        st.session_state.page = "login"
+        st.title("🔐 Login")
+        
+        with st.form("login_form"):
+            email = st.text_input("Email", placeholder="your.email@example.com")
+            password = st.text_input("Password", type="password")
+            submit = st.form_submit_button("Login", type="primary", use_container_width=True)
+            
+            if submit:
+                success, user_id, message = login_user(email, password)
+                if success:
+                    st.session_state.logged_in = True
+                    st.session_state.user_id = user_id
+                    st.session_state.user_email = email
+                    st.success(message)
+                    st.rerun()
+                else:
+                    st.error(message)
+        
+        if st.button("📝 Don't have an account? Sign up"):
+            st.session_state.page = "signup"
+            st.rerun()
 
 # Footer
 st.markdown("---")
-st.markdown("**Phase III - AI-Powered Todo Chat** | Built with Streamlit | Mock Mode - No API Key Required")
+st.markdown("**Simple Todo App** | Built with Streamlit")

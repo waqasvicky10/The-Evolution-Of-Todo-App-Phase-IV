@@ -1,11 +1,1 @@
-# Streamlit Todo App - Requirements for Streamlit Cloud Deployment
-# Install with: pip install -r requirements.txt
-
 streamlit>=1.28.0
-fastapi>=0.109.0
-uvicorn>=0.27.0
-python-multipart
-pydantic>=2.5.0
-openai>=1.0.0
-python-dotenv
-sqlmodel>=0.0.14
