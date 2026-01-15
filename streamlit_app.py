@@ -10,6 +10,7 @@ import streamlit as st
 import os
 import sys
 from pathlib import Path
+import traceback
 
 # Add phase_iii to path so imports work
 project_root = Path(__file__).parent.absolute()
@@ -50,6 +51,7 @@ os.environ["DATABASE_PATH"] = DB_PATH
 os.environ.pop("OPENAI_API_KEY", None)
 
 # Initialize database tables
+db_ready = False
 try:
     from phase_iii.persistence.repositories.conversation_repo import init_conversation_tables
     from phase_iii.persistence.repositories.tool_call_repo import init_tool_call_tables
@@ -57,9 +59,9 @@ try:
     
     # Update database path in modules
     import phase_iii.persistence.repositories.conversation_repo as conv_repo
-    import phase_iii.mcp_server.tools.todo_tools as todo_tools
+    import phase_iii.mcp_server.tools.todo_tools as todo_tools_module
     conv_repo.DATABASE_PATH = DB_PATH
-    todo_tools.DATABASE_PATH = DB_PATH
+    todo_tools_module.DATABASE_PATH = DB_PATH
     
     init_conversation_tables()
     init_tool_call_tables()
@@ -67,7 +69,10 @@ try:
     db_ready = True
 except Exception as e:
     db_ready = False
+    error_trace = traceback.format_exc()
     st.warning(f"⚠️ Database initialization: {str(e)}")
+    with st.expander("Database Error Details"):
+        st.code(error_trace)
 
 # Import agent components
 AGENT_AVAILABLE = False
@@ -86,7 +91,10 @@ try:
     get_agent_config_func = get_agent_config
     AGENT_AVAILABLE = True
 except Exception as e:
+    error_trace = traceback.format_exc()
     st.error(f"❌ Failed to load agent: {str(e)}")
+    with st.expander("Agent Import Error Details"):
+        st.code(error_trace)
 
 try:
     from phase_iii.persistence.repositories.conversation_repo import store_message
@@ -97,19 +105,65 @@ except Exception as e:
     pass  # Optional - app works without persistence
 
 try:
+    import asyncio
     from phase_iii.mcp_server.tools.todo_tools import (
         create_todo_tool, list_todos_tool, update_todo_tool,
         delete_todo_tool, get_todo_tool
     )
+    
+    # Create synchronous wrappers for async tools
+    def sync_create_todo(**kwargs):
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        return loop.run_until_complete(create_todo_tool(kwargs))
+    
+    def sync_list_todos(**kwargs):
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        return loop.run_until_complete(list_todos_tool(kwargs))
+    
+    def sync_update_todo(**kwargs):
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        return loop.run_until_complete(update_todo_tool(kwargs))
+    
+    def sync_delete_todo(**kwargs):
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        return loop.run_until_complete(delete_todo_tool(kwargs))
+    
+    def sync_get_todo(**kwargs):
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        return loop.run_until_complete(get_todo_tool(kwargs))
+    
     todo_tools_dict = {
-        "create_todo": create_todo_tool,
-        "list_todos": list_todos_tool,
-        "update_todo": update_todo_tool,
-        "delete_todo": delete_todo_tool,
-        "get_todo": get_todo_tool,
+        "create_todo": sync_create_todo,
+        "list_todos": sync_list_todos,
+        "update_todo": sync_update_todo,
+        "delete_todo": sync_delete_todo,
+        "get_todo": sync_get_todo,
     }
 except Exception as e:
+    error_trace = traceback.format_exc()
     st.error(f"❌ Failed to load todo tools: {str(e)}")
+    with st.expander("Tools Import Error Details"):
+        st.code(error_trace)
 
 
 def process_message(user_message: str):
@@ -118,7 +172,8 @@ def process_message(user_message: str):
         return {
             "response_text": "I'm having trouble connecting. Please refresh the page and try again.",
             "tool_calls": [],
-            "requires_tool_execution": False
+            "requires_tool_execution": False,
+            "error": "Agent not available"
         }
     
     try:
@@ -149,15 +204,34 @@ def process_message(user_message: str):
                 
                 if tool_name in todo_tools_dict and todo_tools_dict[tool_name]:
                     try:
+                        # Fix input parameter names if needed
+                        if tool_name == "create_todo":
+                            # MockProvider might send "title" but tool expects "description"
+                            if "title" in tool_input and "description" not in tool_input:
+                                tool_input["description"] = tool_input.pop("title")
+                            # Ensure user_id is set
+                            tool_input["user_id"] = st.session_state.user_id
+                        
+                        elif tool_name in ["update_todo", "delete_todo", "get_todo"]:
+                            # Ensure user_id is set
+                            tool_input["user_id"] = st.session_state.user_id
+                            # Fix parameter names
+                            if "todo_id" not in tool_input and "id" in tool_input:
+                                tool_input["todo_id"] = tool_input.pop("id")
+                        
+                        elif tool_name == "list_todos":
+                            tool_input["user_id"] = st.session_state.user_id
+                        
                         result = todo_tools_dict[tool_name](**tool_input)
                         tool_results.append({
                             "tool_use_id": tool_call.get("tool_use_id", ""),
                             "result": result
                         })
                     except Exception as e:
+                        error_trace = traceback.format_exc()
                         tool_results.append({
                             "tool_use_id": tool_call.get("tool_use_id", ""),
-                            "result": {"error": str(e)}
+                            "result": {"error": str(e), "trace": error_trace}
                         })
             
             # Process tool results
@@ -169,15 +243,21 @@ def process_message(user_message: str):
                     )
                     agent_response["response_text"] = final_response.get("response_text", agent_response.get("response_text", ""))
                 except Exception as e:
-                    pass  # Continue with original response
+                    error_trace = traceback.format_exc()
+                    # Include error in response
+                    agent_response["response_text"] = f"Task operation completed, but encountered an issue: {str(e)}"
+                    agent_response["error_trace"] = error_trace
         
         return agent_response
         
     except Exception as e:
+        error_trace = traceback.format_exc()
         return {
-            "response_text": f"I'm sorry, I encountered an error: {str(e)}. Please try rephrasing your request.",
+            "response_text": f"I'm sorry, I encountered an error: {str(e)}",
             "tool_calls": [],
-            "requires_tool_execution": False
+            "requires_tool_execution": False,
+            "error": str(e),
+            "error_trace": error_trace
         }
 
 
@@ -228,6 +308,10 @@ with st.sidebar:
     st.markdown("Supports **English** and **Urdu (اردو)**")
     
     st.markdown("---")
+    st.markdown(f"**Status:** {'✅ Ready' if AGENT_AVAILABLE and db_ready else '⚠️ Issues detected'}")
+    st.markdown(f"**Database:** {DB_PATH}")
+    
+    st.markdown("---")
     if st.button("🗑️ Clear Chat", use_container_width=True):
         st.session_state.messages = []
         st.session_state.conversation_history = []
@@ -266,8 +350,20 @@ if prompt := st.chat_input("Type your message here..."):
             
             response_text = response.get("response_text", "I'm sorry, I didn't understand that. Can you try rephrasing?")
             tool_calls = response.get("tool_calls", [])
+            error_trace = response.get("error_trace")
+            error = response.get("error")
             
-            st.markdown(response_text)
+            # Show error details if available
+            if error_trace:
+                st.error("❌ An error occurred. Details below:")
+                with st.expander("🔍 Error Details (Click to see)", expanded=False):
+                    st.code(error_trace)
+            
+            # Display response
+            if error and "error" in response_text.lower():
+                st.error(response_text)
+            else:
+                st.markdown(response_text)
     
     # Add assistant message
     st.session_state.messages.append({
