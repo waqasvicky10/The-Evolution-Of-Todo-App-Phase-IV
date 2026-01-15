@@ -207,11 +207,11 @@ def process_message(user_message: str):
                     try:
                         # Fix input parameter names if needed
                         if tool_name == "create_todo":
-                            # MockProvider might send "title" but tool expects "description"
-                            if "title" in tool_input and "description" not in tool_input:
-                                tool_input["description"] = tool_input.pop("title")
+                            # Tool expects "title" parameter, which is correct
                             # Ensure user_id is set
-                            tool_input["user_id"] = st.session_state.user_id
+                            if "user_id" not in tool_input:
+                                tool_input["user_id"] = st.session_state.user_id
+                            # Tool will use "title" and map it to "description" in DB
                         
                         elif tool_name in ["update_todo", "delete_todo", "get_todo"]:
                             # Ensure user_id is set
