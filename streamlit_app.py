@@ -18,6 +18,21 @@ from datetime import datetime, timedelta
 from typing import Optional, Tuple, List, Dict
 import json
 import base64
+import io
+import tempfile
+
+# Voice input imports
+try:
+    from audio_recorder_streamlit import audio_recorder
+    AUDIO_RECORDER_AVAILABLE = True
+except ImportError:
+    AUDIO_RECORDER_AVAILABLE = False
+
+try:
+    import speech_recognition as sr
+    SPEECH_RECOGNITION_AVAILABLE = True
+except ImportError:
+    SPEECH_RECOGNITION_AVAILABLE = False
 
 # Page configuration
 st.set_page_config(
@@ -285,8 +300,8 @@ def logout_user(refresh_token: str) -> bool:
 def get_user_tasks(user_id: int) -> list:
     """Get all tasks for a user (US-204)."""
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
+    conn = get_db_connection()
+    cursor = conn.cursor()
         cursor.execute(
             "SELECT id, description, completed, created_at FROM tasks WHERE user_id = ? ORDER BY id DESC",
             (user_id,)
@@ -673,8 +688,8 @@ if st.session_state.logged_in and st.session_state.user_id:
             key="view_mode_radio"
         )
         st.session_state.view_mode = view_mode.lower().replace(" ", "_")
-        
-        st.markdown("---")
+
+    st.markdown("---")
         if st.button("🚪 Logout", type="secondary", use_container_width=True, key="logout_btn"):
             if st.session_state.refresh_token:
                 logout_user(st.session_state.refresh_token)
@@ -707,25 +722,87 @@ if st.session_state.logged_in and st.session_state.user_id:
                     with st.chat_message("assistant"):
                         st.markdown(msg["content"])
         
-        # Chat input
-        if prompt := st.chat_input("Type your message here..."):
-            # Process message
-            response = process_chat_message(st.session_state.user_id, prompt)
-            st.rerun()
+        # Voice input section (Phase III optional feature)
+        st.markdown("---")
+        st.subheader("🎤 Voice Input")
+        
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            # Text input
+            if prompt := st.chat_input("Type your message here..."):
+                # Process message
+                response = process_chat_message(st.session_state.user_id, prompt)
+                st.rerun()
+        
+        with col2:
+            # Voice recorder
+            if AUDIO_RECORDER_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
+                st.markdown("**Or use voice:**")
+                audio_bytes = audio_recorder(
+                    text="🎤 Click to record",
+                    recording_color="#e74c3c",
+                    neutral_color="#34495e",
+                    icon_name="microphone",
+                    icon_size="2x",
+                    pause_threshold=2.0,
+                    key="audio_recorder"
+                )
+                
+                if audio_bytes:
+                    # Process audio
+                    with st.spinner("🎤 Processing your voice..."):
+                        try:
+                            # Save audio to temporary file
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
+                                tmp_file.write(audio_bytes)
+                                tmp_file_path = tmp_file.name
+                            
+                            # Convert speech to text
+                            recognizer = sr.Recognizer()
+                            with sr.AudioFile(tmp_file_path) as source:
+                                audio_data = recognizer.record(source)
+                            
+                            # Recognize speech
+                            try:
+                                voice_text = recognizer.recognize_google(audio_data)
+                                st.success(f"🎤 Heard: *{voice_text}*")
+                                
+                                # Process the voice input as a chat message
+                                if voice_text:
+                                    response = process_chat_message(st.session_state.user_id, voice_text)
+                                    st.rerun()
+                            except sr.UnknownValueError:
+                                st.error("🎤 Could not understand audio. Please try again.")
+                            except sr.RequestError as e:
+                                st.error(f"🎤 Speech recognition service error: {e}")
+                            
+                            # Clean up temp file
+                            try:
+                                os.unlink(tmp_file_path)
+                            except:
+                                pass
+                                
+                        except Exception as e:
+                            st.error(f"🎤 Error processing audio: {str(e)}")
+            else:
+                st.info("🎤 Voice input requires additional packages. Install: `pip install streamlit-audio-recorder SpeechRecognition pydub`")
+        
+        st.markdown("---")
         
         # Clear chat button
         if st.button("🗑️ Clear Chat History", key="clear_chat_btn"):
             clear_conversation_history(st.session_state.user_id)
             st.success("Chat history cleared!")
             st.rerun()
-    
+
     else:
         # Phase II: Traditional Interface
         st.title("✅ My Todo List")
         st.markdown("**Manage your tasks with the traditional interface**")
         
-        st.markdown("---")
-        
+    st.markdown("---")
+
         # Create new task (US-205)
         with st.form("create_task_form", clear_on_submit=True):
             st.subheader("➕ Add New Task")
@@ -740,11 +817,11 @@ if st.session_state.logged_in and st.session_state.user_id:
                         st.rerun()
                     else:
                         st.error(message)
-                else:
+    else:
                     st.error("Task description cannot be empty")
-        
+
         st.markdown("---")
-        
+
         # Display tasks (US-204)
         tasks = get_user_tasks(st.session_state.user_id)
         
@@ -756,7 +833,7 @@ if st.session_state.logged_in and st.session_state.user_id:
             if active_tasks:
                 st.markdown("### 🔄 Active Tasks")
                 for task in active_tasks:
-                    with st.container():
+            with st.container():
                         col1, col2, col3, col4 = st.columns([1, 8, 1, 1])
                         with col1:
                             if st.button("✅", key=f"complete_{task['id']}", help="Mark as complete"):
@@ -778,13 +855,13 @@ if st.session_state.logged_in and st.session_state.user_id:
                             with st.form(f"edit_form_{task['id']}"):
                                 new_description = st.text_input("Edit Task", value=task["description"], key=f"edit_input_{task['id']}", max_chars=500)
                                 col1, col2 = st.columns(2)
-                                with col1:
+                with col1:
                                     if st.form_submit_button("💾 Save", use_container_width=True):
                                         success, msg = update_task(st.session_state.user_id, task["id"], description=new_description)
                                         if success:
                                             st.session_state[f"editing_{task['id']}"] = False
                                             st.rerun()
-                                        else:
+                    else:
                                             st.error(msg)
                                 with col2:
                                     if st.form_submit_button("❌ Cancel", use_container_width=True):
@@ -803,7 +880,7 @@ if st.session_state.logged_in and st.session_state.user_id:
                             if st.button("↩️", key=f"undo_{task['id']}", help="Mark as incomplete"):
                                 update_task(st.session_state.user_id, task["id"], completed=False)
                                 st.rerun()
-                        with col2:
+                with col2:
                             st.write(f"~~{task['description']}~~")
                         with col3:
                             if st.button("✏️", key=f"edit_c_{task['id']}", help="Edit task"):
@@ -822,10 +899,10 @@ if st.session_state.logged_in and st.session_state.user_id:
                                 with col1:
                                     if st.form_submit_button("💾 Save", use_container_width=True):
                                         success, msg = update_task(st.session_state.user_id, task["id"], description=new_description)
-                                        if success:
+                        if success:
                                             st.session_state[f"editing_{task['id']}"] = False
-                                            st.rerun()
-                                        else:
+                            st.rerun()
+                        else:
                                             st.error(msg)
                                 with col2:
                                     if st.form_submit_button("❌ Cancel", use_container_width=True):
@@ -849,13 +926,13 @@ else:
             
             if submit:
                 success, message = register_user(email, password, password_confirm)
-                if success:
+                        if success:
                     st.success(message)
                     st.session_state.page = "login"
-                    st.rerun()
-                else:
-                    st.error(message)
-        
+                            st.rerun()
+                        else:
+                            st.error(message)
+
         if st.button("← Back to Login", key="back_to_login_btn"):
             st.session_state.page = "login"
             st.rerun()
