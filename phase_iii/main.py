@@ -47,8 +47,8 @@ try:
     except Exception as e:
         logger.warning(f"Database initialization warning: {e}")
     
-    # Include chat router
-    app.include_router(chat_router, prefix="/api", tags=["chat"])
+    # Include chat router (router already has prefix="/api" in its definition)
+    app.include_router(chat_router)
     logger.info("Chat API routes included")
 except Exception as e:
     logger.error(f"Failed to import chat routes: {e}")
