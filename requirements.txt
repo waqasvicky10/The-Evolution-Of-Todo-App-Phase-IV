@@ -8,3 +8,4 @@ python-multipart
 pydantic>=2.5.0
 openai>=1.0.0
 python-dotenv
+sqlmodel>=0.0.14

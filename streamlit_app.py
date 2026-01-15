@@ -84,8 +84,11 @@ def process_message(user_message: str):
         }
     
     try:
-        # Get agent
-        agent = create_agent(api_key="mock", config=get_agent_config())
+        # Get API key from environment (set by sidebar)
+        api_key = os.getenv("OPENAI_API_KEY", "")
+        
+        # Get agent (will use OpenAI if API key is set, otherwise MockProvider)
+        agent = create_agent(api_key=api_key if api_key else "mock", config=get_agent_config())
         tools = get_mcp_tool_definitions()
         
         # Get conversation history
@@ -136,8 +139,11 @@ def process_message(user_message: str):
         return agent_response
         
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        st.error(f"Error details: {error_details}")
         return {
-            "response_text": f"Error processing message: {str(e)}",
+            "response_text": f"I'm sorry, I encountered an error: {str(e)}. Please check the error details above or try again.",
             "tool_calls": [],
             "requires_tool_execution": False
         }
@@ -221,18 +227,30 @@ if prompt := st.chat_input("Type your message or use voice commands..."):
     # Process message
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            response = process_message(prompt)
-            
-            response_text = response.get("response_text", "I'm sorry, I didn't understand that.")
-            tool_calls = response.get("tool_calls", [])
-            
-            st.markdown(response_text)
-            
-            # Show tool calls
-            if tool_calls:
-                with st.expander("🔧 Tool Calls Executed"):
-                    for tool_call in tool_calls:
-                        st.json(tool_call)
+            try:
+                response = process_message(prompt)
+                
+                response_text = response.get("response_text", "I'm sorry, I didn't understand that.")
+                tool_calls = response.get("tool_calls", [])
+                
+                # Check if response indicates an error
+                if "error" in response_text.lower() or "sorry" in response_text.lower():
+                    st.error("⚠️ " + response_text)
+                else:
+                    st.markdown(response_text)
+                
+                # Show tool calls
+                if tool_calls:
+                    with st.expander("🔧 Tool Calls Executed"):
+                        for tool_call in tool_calls:
+                            st.json(tool_call)
+            except Exception as e:
+                import traceback
+                st.error(f"❌ Error: {str(e)}")
+                with st.expander("🔍 Error Details"):
+                    st.code(traceback.format_exc())
+                response_text = f"I'm sorry, I encountered an error: {str(e)}"
+                tool_calls = []
     
     # Add assistant message
     st.session_state.messages.append({
