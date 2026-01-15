@@ -300,8 +300,8 @@ def logout_user(refresh_token: str) -> bool:
 def get_user_tasks(user_id: int) -> list:
     """Get all tasks for a user (US-204)."""
     try:
-    conn = get_db_connection()
-    cursor = conn.cursor()
+        conn = get_db_connection()
+        cursor = conn.cursor()
         cursor.execute(
             "SELECT id, description, completed, created_at FROM tasks WHERE user_id = ? ORDER BY id DESC",
             (user_id,)
