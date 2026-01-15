@@ -688,8 +688,8 @@ if st.session_state.logged_in and st.session_state.user_id:
             key="view_mode_radio"
         )
         st.session_state.view_mode = view_mode.lower().replace(" ", "_")
-
-    st.markdown("---")
+        
+        st.markdown("---")
         if st.button("🚪 Logout", type="secondary", use_container_width=True, key="logout_btn"):
             if st.session_state.refresh_token:
                 logout_user(st.session_state.refresh_token)
