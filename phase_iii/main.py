@@ -51,11 +51,21 @@ try:
     app.include_router(chat_router)
     logger.info("Chat API routes included")
 except Exception as e:
-    logger.error(f"Failed to import chat routes: {e}")
+    logger.error(f"Failed to import chat routes: {e}", exc_info=True)
+    import traceback
+    logger.error(f"Traceback: {traceback.format_exc()}")
     # Create a simple router for testing
     @app.get("/api/health")
     async def health():
-        return {"status": "alive", "message": "Chat routes not available"}
+        return {"status": "alive", "message": "Chat routes not available", "error": str(e)}
+    
+    @app.post("/api/chat")
+    async def chat_fallback():
+        return {"error": "Chat routes not available", "details": str(e)}
+    
+    @app.get("/api/chat/history")
+    async def history_fallback():
+        return {"error": "Chat routes not available", "details": str(e)}
 
 
 # Serve static files from chat_ui directory
