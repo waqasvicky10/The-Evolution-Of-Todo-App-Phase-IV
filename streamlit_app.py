@@ -1,15 +1,15 @@
 """
 Phase III Todo Chat App - Streamlit Deployment
-AI-Powered Todo Assistant with Voice Support
+AI-Powered Todo Assistant (Mock Mode - No API Key Required)
 
-This is the main entry point for Streamlit Cloud deployment.
+This is a user-friendly todo chat app that works without any API keys.
+Uses intelligent pattern matching to understand your commands.
 """
 
 import streamlit as st
 import os
 import sys
 from pathlib import Path
-import traceback
 
 # Add phase_iii to path so imports work
 project_root = Path(__file__).parent.absolute()
@@ -22,7 +22,7 @@ if str(phase_iii_path) not in sys.path:
 # Page configuration
 st.set_page_config(
     page_title="Todo Chat - AI Assistant",
-    page_icon="🤖",
+    page_icon="✅",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -34,10 +34,6 @@ if "user_id" not in st.session_state:
     st.session_state.user_id = 1  # Default user for demo
 if "conversation_history" not in st.session_state:
     st.session_state.conversation_history = []
-if "agent_available" not in st.session_state:
-    st.session_state.agent_available = False
-if "import_errors" not in st.session_state:
-    st.session_state.import_errors = []
 
 # Database path - use writable location for Streamlit Cloud
 if os.path.exists("/tmp"):
@@ -47,11 +43,13 @@ elif os.path.exists("/mount/src"):
 else:
     DB_PATH = "todo.db"
 
-# Set database path in environment for modules that need it
+# Set database path in environment
 os.environ["DATABASE_PATH"] = DB_PATH
 
+# Ensure MockProvider is used (no API key needed)
+os.environ.pop("OPENAI_API_KEY", None)
+
 # Initialize database tables
-db_init_success = False
 try:
     from phase_iii.persistence.repositories.conversation_repo import init_conversation_tables
     from phase_iii.persistence.repositories.tool_call_repo import init_tool_call_tables
@@ -66,13 +64,12 @@ try:
     init_conversation_tables()
     init_tool_call_tables()
     init_todo_tables()
-    db_init_success = True
+    db_ready = True
 except Exception as e:
-    error_msg = f"Database initialization: {str(e)}"
-    st.session_state.import_errors.append(error_msg)
-    st.warning(error_msg)
+    db_ready = False
+    st.warning(f"⚠️ Database initialization: {str(e)}")
 
-# Import agent components with detailed error handling
+# Import agent components
 AGENT_AVAILABLE = False
 create_agent_func = None
 get_mcp_tool_definitions_func = None
@@ -87,20 +84,17 @@ try:
     create_agent_func = create_agent
     get_mcp_tool_definitions_func = get_mcp_tool_definitions
     get_agent_config_func = get_agent_config
+    AGENT_AVAILABLE = True
 except Exception as e:
-    error_msg = f"Failed to import agent core: {str(e)}"
-    st.session_state.import_errors.append(error_msg)
+    st.error(f"❌ Failed to load agent: {str(e)}")
 
 try:
-    from phase_iii.persistence.repositories.conversation_repo import (
-        store_message, get_recent_messages
-    )
+    from phase_iii.persistence.repositories.conversation_repo import store_message
     from phase_iii.persistence.models.conversation import MessageRole
     store_message_func = store_message
     MessageRole_enum = MessageRole
 except Exception as e:
-    error_msg = f"Failed to import persistence: {str(e)}"
-    st.session_state.import_errors.append(error_msg)
+    pass  # Optional - app works without persistence
 
 try:
     from phase_iii.mcp_server.tools.todo_tools import (
@@ -115,33 +109,21 @@ try:
         "get_todo": get_todo_tool,
     }
 except Exception as e:
-    error_msg = f"Failed to import todo tools: {str(e)}"
-    st.session_state.import_errors.append(error_msg)
-
-# Check if agent is available
-if create_agent_func and get_mcp_tool_definitions_func and get_agent_config_func:
-    AGENT_AVAILABLE = True
-    st.session_state.agent_available = True
-else:
-    AGENT_AVAILABLE = False
-    st.session_state.agent_available = False
+    st.error(f"❌ Failed to load todo tools: {str(e)}")
 
 
 def process_message(user_message: str):
     """Process user message and return agent response."""
     if not AGENT_AVAILABLE:
         return {
-            "response_text": "⚠️ Agent is not available. Please check the error messages above.",
+            "response_text": "I'm having trouble connecting. Please refresh the page and try again.",
             "tool_calls": [],
             "requires_tool_execution": False
         }
     
     try:
-        # Get API key from environment (set by sidebar)
-        api_key = os.getenv("OPENAI_API_KEY", "")
-        
-        # Get agent (will use OpenAI if API key is set, otherwise MockProvider)
-        agent = create_agent_func(api_key=api_key if api_key else "mock", config=get_agent_config_func())
+        # Always use MockProvider (no API key needed)
+        agent = create_agent_func(api_key="mock", config=get_agent_config_func())
         tools = get_mcp_tool_definitions_func()
         
         # Get conversation history
@@ -187,75 +169,66 @@ def process_message(user_message: str):
                     )
                     agent_response["response_text"] = final_response.get("response_text", agent_response.get("response_text", ""))
                 except Exception as e:
-                    st.warning(f"Tool result processing: {e}")
+                    pass  # Continue with original response
         
         return agent_response
         
     except Exception as e:
-        error_trace = traceback.format_exc()
         return {
-            "response_text": f"❌ Error: {str(e)}",
+            "response_text": f"I'm sorry, I encountered an error: {str(e)}. Please try rephrasing your request.",
             "tool_calls": [],
-            "requires_tool_execution": False,
-            "error_trace": error_trace
+            "requires_tool_execution": False
         }
 
 
 # Main UI
-st.title("🤖 Todo Chat - AI Assistant")
-st.markdown("**Your AI-powered todo management assistant with voice support**")
+st.title("✅ Todo Chat Assistant")
+st.markdown("**Your friendly todo management assistant - No API key required!**")
 
-# Show import errors if any
-if st.session_state.import_errors:
-    with st.expander("⚠️ Import Errors (Click to see details)", expanded=True):
-        for error in st.session_state.import_errors:
-            st.error(error)
-
-# Show agent status
-if AGENT_AVAILABLE:
-    st.success("✅ Agent is ready!")
-else:
-    st.error("❌ Agent is not available. Check errors above.")
+# Welcome message for first-time users
+if len(st.session_state.messages) == 0:
+    st.info("👋 **Welcome!** I can help you manage your todos. Try saying things like:\n- \"Add task buy groceries\"\n- \"List my tasks\"\n- \"Mark task 1 as complete\"\n- \"Delete task 2\"")
 
 # Sidebar
 with st.sidebar:
     st.header("⚙️ Settings")
     
-    # API Key input
-    openai_key = st.text_input(
-        "OpenAI API Key (Optional)",
-        type="password",
-        help="Leave empty to use MockProvider (limited functionality)"
-    )
-    
-    if openai_key:
-        os.environ["OPENAI_API_KEY"] = openai_key
-        st.success("✅ OpenAI API Key set")
-    else:
-        if "OPENAI_API_KEY" in os.environ:
-            del os.environ["OPENAI_API_KEY"]
-        st.info("ℹ️ Using MockProvider (no API key needed)")
+    st.success("✅ **Mock Mode Active**\n\nNo API key needed! This app uses intelligent pattern matching to understand your commands.")
     
     st.markdown("---")
-    st.markdown("### 📝 Instructions")
+    st.markdown("### 📝 How to Use")
     st.markdown("""
-    **Try these commands:**
+    **Create Tasks:**
     - "Add task buy groceries"
-    - "List my tasks"
-    - "ID 1 task completed"
-    - "Delete task 2"
+    - "Create a task to call mom"
+    - "Remind me to finish the report"
     
-    **Supported Languages:**
-    - English
-    - Urdu (اردو)
+    **View Tasks:**
+    - "List my tasks"
+    - "Show all todos"
+    - "What tasks do I have?"
+    
+    **Complete Tasks:**
+    - "Mark task 1 as complete"
+    - "ID 1 task completed"
+    - "Task 2 is done"
+    
+    **Delete Tasks:**
+    - "Delete task 1"
+    - "Remove task 2"
+    - "ID 3 delete"
+    
+    **Update Tasks:**
+    - "Update task 1 to buy milk"
+    - "Change task 2 to call dentist"
     """)
     
     st.markdown("---")
-    st.markdown(f"**Database:** {DB_PATH}")
-    st.markdown(f"**Agent Status:** {'✅ Available' if AGENT_AVAILABLE else '❌ Not Available'}")
+    st.markdown("### 🌍 Languages")
+    st.markdown("Supports **English** and **Urdu (اردو)**")
     
     st.markdown("---")
-    if st.button("🗑️ Clear Chat"):
+    if st.button("🗑️ Clear Chat", use_container_width=True):
         st.session_state.messages = []
         st.session_state.conversation_history = []
         st.rerun()
@@ -264,20 +237,14 @@ with st.sidebar:
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
-        
-        # Show tool calls if any
-        if "tool_calls" in message and message["tool_calls"]:
-            with st.expander("🔧 Tool Calls"):
-                for tool_call in message["tool_calls"]:
-                    st.json(tool_call)
 
 # Chat input
-if prompt := st.chat_input("Type your message or use voice commands..."):
+if prompt := st.chat_input("Type your message here..."):
     # Add user message
     st.session_state.messages.append({"role": "user", "content": prompt})
     st.session_state.conversation_history.append({"role": "user", "content": prompt})
     
-    # Store user message
+    # Store user message (optional)
     if store_message_func and MessageRole_enum:
         try:
             store_message_func(
@@ -285,8 +252,8 @@ if prompt := st.chat_input("Type your message or use voice commands..."):
                 role=MessageRole_enum.USER,
                 content=prompt
             )
-        except Exception as e:
-            st.warning(f"Failed to store message: {e}")
+        except:
+            pass  # Continue even if storage fails
     
     # Display user message
     with st.chat_message("user"):
@@ -295,36 +262,12 @@ if prompt := st.chat_input("Type your message or use voice commands..."):
     # Process message
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            try:
-                response = process_message(prompt)
-                
-                response_text = response.get("response_text", "I'm sorry, I didn't understand that.")
-                tool_calls = response.get("tool_calls", [])
-                error_trace = response.get("error_trace")
-                
-                # Show error trace if available
-                if error_trace:
-                    with st.expander("🔍 Error Details"):
-                        st.code(error_trace)
-                
-                # Display response
-                if "❌" in response_text or "Error" in response_text:
-                    st.error(response_text)
-                else:
-                    st.markdown(response_text)
-                
-                # Show tool calls
-                if tool_calls:
-                    with st.expander("🔧 Tool Calls Executed"):
-                        for tool_call in tool_calls:
-                            st.json(tool_call)
-            except Exception as e:
-                error_trace = traceback.format_exc()
-                st.error(f"❌ Error: {str(e)}")
-                with st.expander("🔍 Error Details"):
-                    st.code(error_trace)
-                response_text = f"I'm sorry, I encountered an error: {str(e)}"
-                tool_calls = []
+            response = process_message(prompt)
+            
+            response_text = response.get("response_text", "I'm sorry, I didn't understand that. Can you try rephrasing?")
+            tool_calls = response.get("tool_calls", [])
+            
+            st.markdown(response_text)
     
     # Add assistant message
     st.session_state.messages.append({
@@ -334,7 +277,7 @@ if prompt := st.chat_input("Type your message or use voice commands..."):
     })
     st.session_state.conversation_history.append({"role": "assistant", "content": response_text})
     
-    # Store assistant message
+    # Store assistant message (optional)
     if store_message_func and MessageRole_enum:
         try:
             store_message_func(
@@ -342,9 +285,9 @@ if prompt := st.chat_input("Type your message or use voice commands..."):
                 role=MessageRole_enum.ASSISTANT,
                 content=response_text
             )
-        except Exception as e:
-            st.warning(f"Failed to store response: {e}")
+        except:
+            pass  # Continue even if storage fails
 
 # Footer
 st.markdown("---")
-st.markdown("**Phase III - AI-Powered Todo Chat** | Built with Streamlit")
+st.markdown("**Phase III - AI-Powered Todo Chat** | Built with Streamlit | Mock Mode - No API Key Required")
