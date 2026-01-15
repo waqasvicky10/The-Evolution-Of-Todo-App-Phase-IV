@@ -855,13 +855,13 @@ if st.session_state.logged_in and st.session_state.user_id:
                             with st.form(f"edit_form_{task['id']}"):
                                 new_description = st.text_input("Edit Task", value=task["description"], key=f"edit_input_{task['id']}", max_chars=500)
                                 col1, col2 = st.columns(2)
-                with col1:
+                                with col1:
                                     if st.form_submit_button("💾 Save", use_container_width=True):
                                         success, msg = update_task(st.session_state.user_id, task["id"], description=new_description)
                                         if success:
                                             st.session_state[f"editing_{task['id']}"] = False
                                             st.rerun()
-                    else:
+                                        else:
                                             st.error(msg)
                                 with col2:
                                     if st.form_submit_button("❌ Cancel", use_container_width=True):
@@ -880,7 +880,7 @@ if st.session_state.logged_in and st.session_state.user_id:
                             if st.button("↩️", key=f"undo_{task['id']}", help="Mark as incomplete"):
                                 update_task(st.session_state.user_id, task["id"], completed=False)
                                 st.rerun()
-                with col2:
+                        with col2:
                             st.write(f"~~{task['description']}~~")
                         with col3:
                             if st.button("✏️", key=f"edit_c_{task['id']}", help="Edit task"):
@@ -899,10 +899,10 @@ if st.session_state.logged_in and st.session_state.user_id:
                                 with col1:
                                     if st.form_submit_button("💾 Save", use_container_width=True):
                                         success, msg = update_task(st.session_state.user_id, task["id"], description=new_description)
-                        if success:
+                                        if success:
                                             st.session_state[f"editing_{task['id']}"] = False
-                            st.rerun()
-                        else:
+                                            st.rerun()
+                                        else:
                                             st.error(msg)
                                 with col2:
                                     if st.form_submit_button("❌ Cancel", use_container_width=True):
@@ -926,13 +926,13 @@ else:
             
             if submit:
                 success, message = register_user(email, password, password_confirm)
-                        if success:
+                if success:
                     st.success(message)
                     st.session_state.page = "login"
-                            st.rerun()
-                        else:
-                            st.error(message)
-
+                    st.rerun()
+                else:
+                    st.error(message)
+        
         if st.button("← Back to Login", key="back_to_login_btn"):
             st.session_state.page = "login"
             st.rerun()
