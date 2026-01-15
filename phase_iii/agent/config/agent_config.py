@@ -16,13 +16,13 @@ class AgentConfig:
     Configuration for the Todo AI Agent.
 
     Attributes:
-        model: Claude model identifier
+        model: Model identifier (OpenAI or mock)
         temperature: Response randomness (0.0-1.0)
         max_tokens: Maximum response length
         timeout: API request timeout in seconds
     """
 
-    model: str = "claude-3-5-sonnet-20241022"
+    model: str = "gpt-4o-mini"
     temperature: float = 0.7
     max_tokens: int = 4096
     timeout: int = 30
@@ -33,7 +33,7 @@ class AgentConfig:
         Create configuration from environment variables.
 
         Environment variables:
-            - AGENT_MODEL: Claude model to use
+            - AGENT_MODEL: Model to use (default: gpt-4o-mini)
             - AGENT_TEMPERATURE: Response temperature
             - AGENT_MAX_TOKENS: Max response tokens
             - AGENT_TIMEOUT: API timeout seconds

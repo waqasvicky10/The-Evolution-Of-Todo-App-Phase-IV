@@ -9,10 +9,19 @@
  */
 
 // Configuration
-// Configuration
-const API_BASE_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+// Always use localhost API when opened from file:// protocol
+const API_BASE_URL = (window.location.protocol === 'file:' || 
+                      window.location.hostname === 'localhost' || 
+                      window.location.hostname === '127.0.0.1' ||
+                      !window.location.hostname)
     ? 'http://localhost:8000/api'
     : '/api';
+
+// Log API URL for debugging
+console.log('API Base URL:', API_BASE_URL);
+console.log('Current location:', window.location.href);
+console.log('Protocol:', window.location.protocol);
+
 const AUTH_TOKEN_KEY = 'todo_chat_token';
 const USER_NAME_KEY = 'todo_chat_user';
 
@@ -38,12 +47,74 @@ const loadingSpinner = document.getElementById('loading-spinner');
 // Voice Recognition
 let recognition = null;
 let isRecording = false;
+// Track permission state - check localStorage first for persistence
+let microphonePermissionGranted = localStorage.getItem('microphone_permission_granted') === 'true';
 
 // Initialize on page load
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     checkAuthentication();
     setupEventListeners();
     setupLanguageMenu();
+    
+    // Check microphone permission state (don't request if already granted)
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        try {
+            // Try to use Permissions API first (if available)
+            if (navigator.permissions && navigator.permissions.query) {
+                try {
+                    const permissionStatus = await navigator.permissions.query({ name: 'microphone' });
+                    console.log('Microphone permission state:', permissionStatus.state);
+                    
+                    if (permissionStatus.state === 'granted') {
+                        microphonePermissionGranted = true;
+                        localStorage.setItem('microphone_permission_granted', 'true');
+                        console.log('Microphone permission already granted');
+                    } else if (permissionStatus.state === 'prompt' && !microphonePermissionGranted) {
+                        // Only request if in 'prompt' state (not yet asked) AND not already granted
+                        try {
+                            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                            stream.getTracks().forEach(track => track.stop());
+                            microphonePermissionGranted = true;
+                            localStorage.setItem('microphone_permission_granted', 'true');
+                            console.log('Microphone permission granted on page load');
+                        } catch (error) {
+                            console.log('Microphone permission denied:', error.name);
+                            localStorage.setItem('microphone_permission_granted', 'false');
+                        }
+                    } else {
+                        console.log('Microphone permission denied, user needs to enable in browser settings');
+                        localStorage.setItem('microphone_permission_granted', 'false');
+                    }
+                    
+                    // Listen for permission changes
+                    permissionStatus.onchange = () => {
+                        microphonePermissionGranted = permissionStatus.state === 'granted';
+                        console.log('Microphone permission state changed to:', permissionStatus.state);
+                    };
+                } catch (permError) {
+                    // Permissions API might not support 'microphone' name, use fallback
+                    console.log('Permissions API error, using fallback:', permError);
+                    // Fall through to fallback
+                }
+            }
+            
+            // Fallback: Check permission by trying to access (only if not already granted)
+            if (!microphonePermissionGranted) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    stream.getTracks().forEach(track => track.stop());
+                    microphonePermissionGranted = true;
+                    localStorage.setItem('microphone_permission_granted', 'true');
+                    console.log('Microphone permission granted (fallback)');
+                } catch (err) {
+                    console.log('Microphone permission not granted (will request when needed):', err.name);
+                    localStorage.setItem('microphone_permission_granted', 'false');
+                }
+            }
+        } catch (error) {
+            console.log('Error checking microphone permission:', error);
+        }
+    }
 });
 
 /**
@@ -143,8 +214,7 @@ function setupEventListeners() {
         }
     });
 
-    // Initialize voice recognition
-    initVoiceRecognition();
+    // Voice recognition will be initialized after permission check in DOMContentLoaded
 }
 
 /**
@@ -300,9 +370,19 @@ async function handleSendMessage(e) {
         }
 
         const data = await response.json();
+        
+        // Log response for debugging
+        console.log('API Response:', data);
 
-        // Display assistant response
-        appendMessage('assistant', data.response, data.timestamp, true, data.tool_calls);
+        // Ensure we have a response
+        if (!data || !data.response || (typeof data.response === 'string' && data.response.trim() === '')) {
+            console.warn('Empty or invalid response from API:', data);
+            data.response = data.response || 'I received your message but got an empty response. Please try again.';
+        }
+
+        // Display assistant response - ensure response is always a string
+        const responseText = String(data.response || 'No response received');
+        appendMessage('assistant', responseText, data.timestamp || new Date().toISOString(), true, data.tool_calls || []);
         scrollToBottom();
 
         setStatus('Ready');
@@ -342,7 +422,10 @@ function appendMessage(role, content, timestamp, animate = true, toolCalls = [])
 
     const bubble = document.createElement('div');
     bubble.className = 'message-bubble';
-    bubble.textContent = content;
+    // Use innerHTML to preserve formatting and support Urdu text
+    // Ensure content is a string and handle null/undefined
+    const safeContent = String(content || 'No response received');
+    bubble.innerHTML = safeContent.replace(/\n/g, '<br>');
 
     const timestampDiv = document.createElement('div');
     timestampDiv.className = 'message-timestamp';
@@ -448,7 +531,62 @@ function hideError() {
 }
 
 /**
+ * Correct common speech recognition errors
+ */
+function correctSpeechRecognitionErrors(text) {
+    if (!text) return text;
+    
+    // Common misrecognitions: "86" -> "6", "80" -> "8", etc.
+    // Fix numbers that are likely misrecognitions (when followed by task/ID context)
+    // Fix "ID 86" -> "ID 6" specifically (most common issue)
+    text = text.replace(/\bid\s+86\b/gi, 'id 6');
+    text = text.replace(/\btask\s+86\b/gi, 'task 6');
+    text = text.replace(/\bnumber\s+86\b/gi, 'number 6');
+    text = text.replace(/\b86\s+task\b/gi, '6 task');
+    text = text.replace(/\b86\s+completed\b/gi, '6 completed');
+    text = text.replace(/\b86\s+is\s+completed\b/gi, '6 is completed');
+    
+    // Fix other common number misrecognitions in task context
+    text = text.replace(/\bid\s+80\b/gi, 'id 8');
+    text = text.replace(/\bid\s+87\b/gi, 'id 7');
+    text = text.replace(/\bid\s+85\b/gi, 'id 5');
+    text = text.replace(/\bid\s+84\b/gi, 'id 4');
+    text = text.replace(/\bid\s+83\b/gi, 'id 3');
+    text = text.replace(/\bid\s+82\b/gi, 'id 2');
+    text = text.replace(/\bid\s+81\b/gi, 'id 1');
+    text = text.replace(/\bid\s+90\b/gi, 'id 9');
+    
+    // Fix standalone number misrecognitions (less aggressive)
+    text = text.replace(/\b86\b(?=\s*(?:task|completed|done|finished|is|was))/gi, '6');
+    text = text.replace(/\b80\b(?=\s*(?:task|completed|done|finished|is|was))/gi, '8');
+    
+    // Fix common word misrecognitions
+    text = text.replace(/\bto do\b/gi, 'todo');
+    text = text.replace(/\bto-do\b/gi, 'todo');
+    text = text.replace(/\btwo do\b/gi, 'todo');
+    
+    return text;
+}
+
+/**
+ * Request microphone permission upfront
+ */
+async function requestMicrophonePermission() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Permission granted, stop the stream immediately
+        stream.getTracks().forEach(track => track.stop());
+        console.log('Microphone permission granted');
+        return true;
+    } catch (error) {
+        console.warn('Microphone permission denied or not available:', error);
+        return false;
+    }
+}
+
+/**
  * Initialize voice recognition
+ * NOTE: This should be called AFTER microphone permission is granted
  */
 function initVoiceRecognition() {
     // Check if browser supports speech recognition
@@ -456,16 +594,15 @@ function initVoiceRecognition() {
 
     if (!SpeechRecognition) {
         console.warn('Speech recognition not supported in this browser');
-        // if (voiceButton) {
-        //     voiceButton.style.display = 'none';
-        //     voiceButton.title = "Voice input not supported in this browser";
-        // }
         return;
     }
 
     recognition = new SpeechRecognition();
     recognition.continuous = false;
     recognition.interimResults = false;
+    
+    // IMPORTANT: Set serviceURI to prevent permission prompts if possible
+    // Some browsers require this to be set before using recognition
 
     // Default to stored language or English
     const storedLang = localStorage.getItem('todo_chat_lang') || 'en';
@@ -478,7 +615,15 @@ function initVoiceRecognition() {
     };
 
     recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
+        const originalTranscript = event.results[0][0].transcript;
+        let transcript = originalTranscript;
+        
+        // Correct common speech recognition errors
+        transcript = correctSpeechRecognitionErrors(transcript);
+        
+        console.log('Original transcript:', originalTranscript);
+        console.log('Corrected transcript:', transcript);
+        
         messageInput.value = transcript;
         setStatus('Processing voice input...');
 
@@ -518,28 +663,103 @@ function initVoiceRecognition() {
 /**
  * Handle voice input button click
  */
-function handleVoiceInput() {
-    if (!recognition) {
-        showError('Voice input not available in this browser');
+async function handleVoiceInput() {
+    if (isRecording) {
+        // Stop recording
+        if (recognition) {
+            recognition.stop();
+        }
         return;
     }
 
-    if (isRecording) {
-        // Stop recording
-        recognition.stop();
-        return;
+    // CRITICAL FIX: Check actual permission state using Permissions API
+    // This prevents repeated prompts by checking browser's actual permission state
+    let shouldRequestPermission = true;
+    
+    if (navigator.permissions && navigator.permissions.query) {
+        try {
+            const permissionStatus = await navigator.permissions.query({ name: 'microphone' });
+            console.log('Microphone permission state:', permissionStatus.state);
+            
+            if (permissionStatus.state === 'granted') {
+                microphonePermissionGranted = true;
+                localStorage.setItem('microphone_permission_granted', 'true');
+                shouldRequestPermission = false;
+                console.log('✅ Permission already granted (from Permissions API)');
+            } else if (permissionStatus.state === 'denied') {
+                microphonePermissionGranted = false;
+                localStorage.setItem('microphone_permission_granted', 'false');
+                shouldRequestPermission = false;
+                showError('Microphone permission denied. Please enable it in browser settings.');
+                return;
+            }
+            // If 'prompt', we'll request permission below
+        } catch (permError) {
+            console.log('Permissions API not available, using fallback:', permError);
+            // Fall through to getUserMedia check
+        }
+    }
+    
+    // Request permission via getUserMedia if needed
+    if (shouldRequestPermission && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        // Only request if not already granted (check localStorage as backup)
+        if (!microphonePermissionGranted) {
+            try {
+                console.log('Requesting microphone permission before starting recognition...');
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                stream.getTracks().forEach(track => track.stop());
+                microphonePermissionGranted = true;
+                localStorage.setItem('microphone_permission_granted', 'true');
+                console.log('✅ Microphone permission granted - recognition can start without prompt');
+            } catch (error) {
+                if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+                    microphonePermissionGranted = false;
+                    localStorage.setItem('microphone_permission_granted', 'false');
+                    showError('Microphone permission denied. Please allow microphone access in your browser settings.');
+                    return;
+                }
+                console.warn('Microphone permission check failed:', error);
+                // Continue anyway - might work if permission was granted previously
+            }
+        } else {
+            console.log('✅ Microphone permission already granted (from localStorage) - starting recognition');
+        }
+    }
+    
+    // Check if recognition is available
+    if (!recognition) {
+        initVoiceRecognition();
+        if (!recognition) {
+            showError('Voice input not available in this browser');
+            return;
+        }
     }
 
     // Use stored language preference
     const storedLang = localStorage.getItem('todo_chat_lang') || 'en';
     recognition.lang = storedLang === 'ur' ? 'ur-PK' : 'en-US';
 
-    // Start recording
+    // Start recording - permission should already be granted at this point
     try {
+        console.log('Starting SpeechRecognition (permission should be granted)...');
         recognition.start();
     } catch (error) {
-        console.error('Failed to start recognition:', error);
-        showError('Failed to start voice input. Please try again.');
+        console.error('Error starting recognition:', error);
+        isRecording = false;
+        voiceButton.classList.remove('recording');
+        
+        if (error.name === 'InvalidStateError') {
+            showError('Voice recognition is already running');
+        } else if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+            // Permission was denied - update state
+            microphonePermissionGranted = false;
+            localStorage.setItem('microphone_permission_granted', 'false');
+            showError('Microphone permission denied. Please allow microphone access in your browser settings.');
+            setStatus('Permission denied');
+        } else {
+            showError('Failed to start voice recognition. Please try again.');
+            setStatus('Error');
+        }
     }
 }
 

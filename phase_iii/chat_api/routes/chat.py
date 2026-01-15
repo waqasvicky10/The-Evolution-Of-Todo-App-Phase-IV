@@ -234,6 +234,11 @@ async def chat(
             )
 
         logger.info("Chat processing complete")
+        
+        # Ensure we always have a response
+        if not final_response_text or final_response_text.strip() == "":
+            final_response_text = "I've processed your request."
+            logger.warning("Empty response detected, using default message")
 
         return ChatMessageResponse(
             response=final_response_text,
