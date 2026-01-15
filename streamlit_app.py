@@ -273,7 +273,7 @@ if st.session_state.logged_in:
     st.markdown(f"**Welcome, {st.session_state.user_email}!**")
     
     # Logout button
-    if st.button("🚪 Logout", type="secondary"):
+    if st.button("🚪 Logout", type="secondary", key="logout_btn"):
         st.session_state.logged_in = False
         st.session_state.user_id = None
         st.session_state.user_email = None
@@ -393,14 +393,13 @@ if st.session_state.logged_in:
     
 else:
     # User is not logged in - show login/register
-    if st.session_state.page == "signup" or st.button("📝 Don't have an account? Sign up"):
-        st.session_state.page = "signup"
+    if st.session_state.page == "signup":
         st.title("📝 Sign Up")
         
         with st.form("signup_form"):
-            email = st.text_input("Email", placeholder="your.email@example.com")
-            password = st.text_input("Password", type="password", placeholder="At least 8 characters")
-            password_confirm = st.text_input("Confirm Password", type="password")
+            email = st.text_input("Email", placeholder="your.email@example.com", key="signup_email")
+            password = st.text_input("Password", type="password", placeholder="At least 8 characters", key="signup_password")
+            password_confirm = st.text_input("Confirm Password", type="password", key="signup_password_confirm")
             submit = st.form_submit_button("Sign Up", type="primary", use_container_width=True)
             
             if submit:
@@ -415,7 +414,7 @@ else:
                     else:
                         st.error(message)
         
-        if st.button("← Back to Login"):
+        if st.button("← Back to Login", key="back_to_login_btn"):
             st.session_state.page = "login"
             st.rerun()
     
@@ -424,8 +423,8 @@ else:
         st.title("🔐 Login")
         
         with st.form("login_form"):
-            email = st.text_input("Email", placeholder="your.email@example.com")
-            password = st.text_input("Password", type="password")
+            email = st.text_input("Email", placeholder="your.email@example.com", key="login_email")
+            password = st.text_input("Password", type="password", key="login_password")
             submit = st.form_submit_button("Login", type="primary", use_container_width=True)
             
             if submit:
@@ -439,7 +438,7 @@ else:
                 else:
                     st.error(message)
         
-        if st.button("📝 Don't have an account? Sign up"):
+        if st.button("📝 Don't have an account? Sign up", key="signup_link_btn"):
             st.session_state.page = "signup"
             st.rerun()
 
