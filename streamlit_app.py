@@ -67,7 +67,7 @@ try:
     init_tool_call_tables()
     init_todo_tables()
     db_ready = True
-except Exception as e:
+    except Exception as e:
     db_ready = False
     error_trace = traceback.format_exc()
     st.warning(f"⚠️ Database initialization: {str(e)}")
@@ -90,7 +90,7 @@ try:
     get_mcp_tool_definitions_func = get_mcp_tool_definitions
     get_agent_config_func = get_agent_config
     AGENT_AVAILABLE = True
-except Exception as e:
+    except Exception as e:
     error_trace = traceback.format_exc()
     st.error(f"❌ Failed to load agent: {str(e)}")
     with st.expander("Agent Import Error Details"):
@@ -101,7 +101,7 @@ try:
     from phase_iii.persistence.models.conversation import MessageRole
     store_message_func = store_message
     MessageRole_enum = MessageRole
-except Exception as e:
+    except Exception as e:
     pass  # Optional - app works without persistence
 
 try:
@@ -112,6 +112,7 @@ try:
     )
     
     # Create synchronous wrappers for async tools
+    # Tools expect a single 'arguments' dict parameter
     def sync_create_todo(**kwargs):
         try:
             loop = asyncio.get_event_loop()
@@ -159,7 +160,7 @@ try:
         "delete_todo": sync_delete_todo,
         "get_todo": sync_get_todo,
     }
-except Exception as e:
+    except Exception as e:
     error_trace = traceback.format_exc()
     st.error(f"❌ Failed to load todo tools: {str(e)}")
     with st.expander("Tools Import Error Details"):
@@ -249,7 +250,7 @@ def process_message(user_message: str):
                     agent_response["error_trace"] = error_trace
         
         return agent_response
-        
+
     except Exception as e:
         error_trace = traceback.format_exc()
         return {
@@ -274,7 +275,7 @@ with st.sidebar:
     st.header("⚙️ Settings")
     
     st.success("✅ **Mock Mode Active**\n\nNo API key needed! This app uses intelligent pattern matching to understand your commands.")
-    
+
     st.markdown("---")
     st.markdown("### 📝 How to Use")
     st.markdown("""
@@ -302,7 +303,7 @@ with st.sidebar:
     - "Update task 1 to buy milk"
     - "Change task 2 to call dentist"
     """)
-    
+
     st.markdown("---")
     st.markdown("### 🌍 Languages")
     st.markdown("Supports **English** and **Urdu (اردو)**")
@@ -310,12 +311,12 @@ with st.sidebar:
     st.markdown("---")
     st.markdown(f"**Status:** {'✅ Ready' if AGENT_AVAILABLE and db_ready else '⚠️ Issues detected'}")
     st.markdown(f"**Database:** {DB_PATH}")
-    
-    st.markdown("---")
+
+        st.markdown("---")
     if st.button("🗑️ Clear Chat", use_container_width=True):
         st.session_state.messages = []
         st.session_state.conversation_history = []
-        st.rerun()
+                            st.rerun()
 
 # Display chat messages
 for message in st.session_state.messages:
@@ -362,7 +363,7 @@ if prompt := st.chat_input("Type your message here..."):
             # Display response
             if error and "error" in response_text.lower():
                 st.error(response_text)
-            else:
+    else:
                 st.markdown(response_text)
     
     # Add assistant message
