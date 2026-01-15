@@ -801,8 +801,8 @@ if st.session_state.logged_in and st.session_state.user_id:
         st.title("✅ My Todo List")
         st.markdown("**Manage your tasks with the traditional interface**")
         
-    st.markdown("---")
-
+        st.markdown("---")
+        
         # Create new task (US-205)
         with st.form("create_task_form", clear_on_submit=True):
             st.subheader("➕ Add New Task")
