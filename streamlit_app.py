@@ -833,7 +833,7 @@ if st.session_state.logged_in and st.session_state.user_id:
             if active_tasks:
                 st.markdown("### 🔄 Active Tasks")
                 for task in active_tasks:
-            with st.container():
+                    with st.container():
                         col1, col2, col3, col4 = st.columns([1, 8, 1, 1])
                         with col1:
                             if st.button("✅", key=f"complete_{task['id']}", help="Mark as complete"):
