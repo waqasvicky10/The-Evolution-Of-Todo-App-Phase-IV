@@ -21,18 +21,8 @@ import base64
 import io
 import tempfile
 
-# Voice input imports
-try:
-    from audio_recorder_streamlit import audio_recorder
-    AUDIO_RECORDER_AVAILABLE = True
-except ImportError:
-    AUDIO_RECORDER_AVAILABLE = False
-
-try:
-    import speech_recognition as sr
-    SPEECH_RECOGNITION_AVAILABLE = True
-except ImportError:
-    SPEECH_RECOGNITION_AVAILABLE = False
+# Voice input will use browser's Web Speech API (no Python packages needed)
+VOICE_INPUT_AVAILABLE = True
 
 # Page configuration
 st.set_page_config(
@@ -736,57 +726,104 @@ if st.session_state.logged_in and st.session_state.user_id:
                 st.rerun()
         
         with col2:
-            # Voice recorder
-            if AUDIO_RECORDER_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
+            # Voice input using browser's Web Speech API
+            if VOICE_INPUT_AVAILABLE:
                 st.markdown("**Or use voice:**")
-                audio_bytes = audio_recorder(
-                    text="🎤 Click to record",
-                    recording_color="#e74c3c",
-                    neutral_color="#34495e",
-                    icon_name="microphone",
-                    icon_size="2x",
-                    pause_threshold=2.0,
-                    key="audio_recorder"
-                )
                 
-                if audio_bytes:
-                    # Process audio
-                    with st.spinner("🎤 Processing your voice..."):
-                        try:
-                            # Save audio to temporary file
-                            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
-                                tmp_file.write(audio_bytes)
-                                tmp_file_path = tmp_file.name
-                            
-                            # Convert speech to text
-                            recognizer = sr.Recognizer()
-                            with sr.AudioFile(tmp_file_path) as source:
-                                audio_data = recognizer.record(source)
-                            
-                            # Recognize speech
-                            try:
-                                voice_text = recognizer.recognize_google(audio_data)
-                                st.success(f"🎤 Heard: *{voice_text}*")
-                                
-                                # Process the voice input as a chat message
-                                if voice_text:
-                                    response = process_chat_message(st.session_state.user_id, voice_text)
-                                    st.rerun()
-                            except sr.UnknownValueError:
-                                st.error("🎤 Could not understand audio. Please try again.")
-                            except sr.RequestError as e:
-                                st.error(f"🎤 Speech recognition service error: {e}")
-                            
-                            # Clean up temp file
-                            try:
-                                os.unlink(tmp_file_path)
-                            except:
-                                pass
-                                
-                        except Exception as e:
-                            st.error(f"🎤 Error processing audio: {str(e)}")
-            else:
-                st.info("🎤 Voice input requires additional packages. Install: `pip install streamlit-audio-recorder SpeechRecognition pydub`")
+                # Create HTML/JS component for voice input
+                voice_html = """
+                <div style="margin: 10px 0;">
+                    <button id="voiceBtn" onclick="startVoiceRecognition()" 
+                            style="background-color: #e74c3c; color: white; border: none; 
+                                   padding: 10px 20px; border-radius: 5px; cursor: pointer;
+                                   font-size: 16px;">
+                        🎤 Click to Record Voice
+                    </button>
+                    <div id="voiceStatus" style="margin-top: 10px; color: #666;"></div>
+                    <div id="voiceResult" style="margin-top: 10px;"></div>
+                </div>
+                
+                <script>
+                let recognition = null;
+                
+                function startVoiceRecognition() {
+                    const btn = document.getElementById('voiceBtn');
+                    const status = document.getElementById('voiceStatus');
+                    
+                    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                        status.innerHTML = '<span style="color: red;">❌ Speech recognition not supported in your browser. Please use Chrome, Edge, or Safari.</span>';
+                        return;
+                    }
+                    
+                    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                    recognition = new SpeechRecognition();
+                    recognition.continuous = false;
+                    recognition.interimResults = false;
+                    recognition.lang = 'en-US';
+                    
+                    btn.textContent = '🎤 Listening... (Click to stop)';
+                    btn.style.backgroundColor = '#27ae60';
+                    status.innerHTML = '<span style="color: green;">🎤 Listening... Speak now!</span>';
+                    
+                    recognition.onresult = function(event) {
+                        const transcript = event.results[0][0].transcript;
+                        status.innerHTML = '<span style="color: green;">✅ Heard: ' + transcript + '</span>';
+                        
+                        // Store transcript in session storage for Streamlit to pick up
+                        sessionStorage.setItem('voiceInput', transcript);
+                        
+                        // Trigger a custom event
+                        window.dispatchEvent(new Event('voiceInputReceived'));
+                    };
+                    
+                    recognition.onerror = function(event) {
+                        status.innerHTML = '<span style="color: red;">❌ Error: ' + event.error + '</span>';
+                        btn.textContent = '🎤 Click to Record Voice';
+                        btn.style.backgroundColor = '#e74c3c';
+                    };
+                    
+                    recognition.onend = function() {
+                        btn.textContent = '🎤 Click to Record Voice';
+                        btn.style.backgroundColor = '#e74c3c';
+                        if (!status.innerHTML.includes('Heard:')) {
+                            status.innerHTML = '<span style="color: orange;">⚠️ Recognition ended</span>';
+                        }
+                    };
+                    
+                    recognition.start();
+                    
+                    // Stop on button click again
+                    btn.onclick = function() {
+                        if (recognition) {
+                            recognition.stop();
+                            btn.onclick = startVoiceRecognition;
+                        }
+                    };
+                }
+                
+                // Listen for voice input events
+                window.addEventListener('voiceInputReceived', function() {
+                    const voiceText = sessionStorage.getItem('voiceInput');
+                    if (voiceText) {
+                        // Send to Streamlit via URL parameters or custom message
+                        window.location.href = window.location.href.split('?')[0] + '?voice_input=' + encodeURIComponent(voiceText);
+                    }
+                });
+                </script>
+                """
+                
+                st.components.v1.html(voice_html, height=200)
+                
+                # Check for voice input from URL parameters
+                query_params = st.query_params
+                if "voice_input" in query_params:
+                    voice_text = query_params["voice_input"]
+                    if voice_text:
+                        st.success(f"🎤 Heard: *{voice_text}*")
+                        response = process_chat_message(st.session_state.user_id, voice_text)
+                        # Clear the parameter
+                        st.query_params.clear()
+                        st.rerun()
         
         st.markdown("---")
         
