@@ -817,7 +817,7 @@ if st.session_state.logged_in and st.session_state.user_id:
                         st.rerun()
                     else:
                         st.error(message)
-    else:
+                else:
                     st.error("Task description cannot be empty")
 
         st.markdown("---")
