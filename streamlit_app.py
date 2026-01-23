@@ -941,43 +941,70 @@ if st.session_state.logged_in and st.session_state.user_id:
                 # Initialize voice input state
                 if "voice_text_result" not in st.session_state:
                     st.session_state.voice_text_result = ""
-                if "voice_auto_submit" not in st.session_state:
-                    st.session_state.voice_auto_submit = False
+                if "process_voice_input" not in st.session_state:
+                    st.session_state.process_voice_input = False
                 
-                # Voice input text field (will be filled by JavaScript)
+                # Voice input text field (will be filled by JavaScript or manually)
                 voice_text_input = st.text_input(
-                    "Voice input will appear here (then click Submit)",
+                    "Voice input (speak or type)",
                     value=st.session_state.voice_text_result,
                     key="voice_text_input",
-                    placeholder="Click voice button and speak, then click Submit..."
+                    placeholder="Click voice button and speak, or type your message..."
                 )
                 
-                # Submit button for voice input
-                if st.button("📤 Submit Voice Input", key="submit_voice", use_container_width=True, disabled=not voice_text_input.strip()):
-                    if voice_text_input and voice_text_input.strip():
-                        voice_text = voice_text_input.strip()
-                        # Display in chat immediately
-                        with st.chat_message("user"):
-                            st.write(voice_text)
+                # Update session state when input changes
+                if voice_text_input != st.session_state.voice_text_result:
+                    st.session_state.voice_text_result = voice_text_input
+                
+                # Submit button for voice input (always enabled)
+                col_submit1, col_submit2 = st.columns([1, 1])
+                with col_submit1:
+                    if st.button("📤 Submit Voice Input", key="submit_voice", use_container_width=True):
+                        if voice_text_input and voice_text_input.strip():
+                            voice_text = voice_text_input.strip()
+                            # Process the voice input
+                            st.session_state.process_voice_input = True
+                            st.session_state.voice_text_to_process = voice_text
+                            st.rerun()
+                        else:
+                            st.warning("Please enter some text first (use voice button or type manually)")
+                
+                with col_submit2:
+                    if st.button("🗑️ Clear", key="clear_voice", use_container_width=True):
+                        st.session_state.voice_text_result = ""
+                        st.session_state.process_voice_input = False
+                        st.rerun()
+                
+                # Process voice input if flag is set
+                if st.session_state.get("process_voice_input", False) and st.session_state.get("voice_text_to_process"):
+                    voice_text = st.session_state.voice_text_to_process
+                    
+                    # Display in chat immediately
+                    with st.chat_message("user"):
+                        st.write(voice_text)
+                    
+                    try:
+                        with st.spinner("🤔 Processing your voice command..."):
+                            response = process_chat_message(st.session_state.user_id, voice_text)
                         
-                        try:
-                            with st.spinner("🤔 Processing your voice command..."):
-                                response = process_chat_message(st.session_state.user_id, voice_text)
-                            
-                            # Display response
-                            with st.chat_message("assistant"):
-                                st.markdown(response)
-                            
-                            # Clear voice input
-                            st.session_state.voice_text_result = ""
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"❌ Error processing voice input: {str(e)}")
-                            import traceback
-                            with st.expander("🔍 Error details (click to expand)"):
-                                st.code(traceback.format_exc())
-                            st.session_state.voice_text_result = ""
-                            st.rerun()
+                        # Display response
+                        with st.chat_message("assistant"):
+                            st.markdown(response)
+                        
+                        # Clear voice input and reset flags
+                        st.session_state.voice_text_result = ""
+                        st.session_state.process_voice_input = False
+                        st.session_state.voice_text_to_process = ""
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error processing voice input: {str(e)}")
+                        import traceback
+                        with st.expander("🔍 Error details (click to expand)"):
+                            st.code(traceback.format_exc())
+                        # Clear flags
+                        st.session_state.process_voice_input = False
+                        st.session_state.voice_text_to_process = ""
+                        st.rerun()
                 
                 # Create HTML/JS component for voice input (no navigation, just fills input)
                 voice_html = """
