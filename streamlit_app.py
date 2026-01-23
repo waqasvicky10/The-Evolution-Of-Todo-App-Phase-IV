@@ -598,14 +598,33 @@ def find_task_by_reference(user_id: int, reference: str) -> Optional[Dict]:
 
 def process_chat_message(user_id: int, message: str) -> str:
     """Process chat message and return AI response (Phase III)."""
+    # Validate and clean message
+    if not message or not isinstance(message, str):
+        return "I'm sorry, I didn't receive a valid message. Please try again."
+    
+    message = message.strip()
+    if not message or len(message) < 1:
+        return "I'm sorry, your message appears to be empty. Please try again."
+    
     # Store user message
-    store_message(user_id, "user", message)
+    try:
+        store_message(user_id, "user", message)
+    except Exception as e:
+        # Log but continue processing - don't fail if storage fails
+        pass
     
     # Get conversation history for context
-    history = get_conversation_history(user_id, limit=5)
+    try:
+        history = get_conversation_history(user_id, limit=5)
+    except Exception:
+        history = []
     
     # Recognize intent
-    intent, params = recognize_intent(message)
+    try:
+        intent, params = recognize_intent(message)
+    except Exception as e:
+        # If intent recognition fails, treat as unknown
+        intent, params = "unknown", {}
     
     try:
         if intent == "create":
@@ -868,38 +887,76 @@ if st.session_state.logged_in and st.session_state.user_id:
             # Text input
             if prompt := st.chat_input("Type your message here..."):
                 # Process message
-                response = process_chat_message(st.session_state.user_id, prompt)
-                st.rerun()
+                try:
+                    response = process_chat_message(st.session_state.user_id, prompt)
+                    # Force rerun to show response
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error processing message: {str(e)}")
+                    import traceback
+                    with st.expander("Error details"):
+                        st.code(traceback.format_exc())
         
         with col2:
             # Voice input using browser's Web Speech API
             if VOICE_INPUT_AVAILABLE:
                 st.markdown("**Or use voice:**")
                 
-                # Create HTML/JS component for voice input
-                voice_html = """
+                # Initialize voice input state
+                if "voice_input_text" not in st.session_state:
+                    st.session_state.voice_input_text = None
+                if "voice_input_processed" not in st.session_state:
+                    st.session_state.voice_input_processed = False
+                
+                # Process voice input if available
+                if st.session_state.voice_input_text and not st.session_state.voice_input_processed:
+                    voice_text = st.session_state.voice_input_text
+                    st.success(f"🎤 Heard: *{voice_text}*")
+                    try:
+                        response = process_chat_message(st.session_state.user_id, voice_text)
+                        st.session_state.voice_input_processed = True
+                        st.session_state.voice_input_text = None
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error processing voice input: {str(e)}")
+                        st.session_state.voice_input_processed = True
+                        st.session_state.voice_input_text = None
+                
+                # Create HTML/JS component for voice input with better integration
+                voice_html = f"""
                 <div style="margin: 10px 0;">
                     <button id="voiceBtn" onclick="startVoiceRecognition()" 
                             style="background-color: #e74c3c; color: white; border: none; 
                                    padding: 10px 20px; border-radius: 5px; cursor: pointer;
-                                   font-size: 16px;">
+                                   font-size: 16px; width: 100%;">
                         🎤 Click to Record Voice
                     </button>
-                    <div id="voiceStatus" style="margin-top: 10px; color: #666;"></div>
-                    <div id="voiceResult" style="margin-top: 10px;"></div>
+                    <div id="voiceStatus" style="margin-top: 10px; color: #666; font-size: 14px; min-height: 20px;"></div>
                 </div>
                 
                 <script>
                 let recognition = null;
+                let isRecording = false;
                 
-                function startVoiceRecognition() {
+                function startVoiceRecognition() {{
                     const btn = document.getElementById('voiceBtn');
                     const status = document.getElementById('voiceStatus');
                     
-                    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-                        status.innerHTML = '<span style="color: red;">❌ Speech recognition not supported in your browser. Please use Chrome, Edge, or Safari.</span>';
+                    if (isRecording) {{
+                        if (recognition) {{
+                            recognition.stop();
+                        }}
+                        isRecording = false;
+                        btn.textContent = '🎤 Click to Record Voice';
+                        btn.style.backgroundColor = '#e74c3c';
+                        status.innerHTML = '<span style="color: orange;">⏹️ Stopped recording</span>';
                         return;
-                    }
+                    }}
+                    
+                    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {{
+                        status.innerHTML = '<span style="color: red;">❌ Speech recognition not supported. Please use Chrome, Edge, or Safari.</span>';
+                        return;
+                    }}
                     
                     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
                     recognition = new SpeechRecognition();
@@ -907,69 +964,92 @@ if st.session_state.logged_in and st.session_state.user_id:
                     recognition.interimResults = false;
                     recognition.lang = 'en-US';
                     
+                    isRecording = true;
                     btn.textContent = '🎤 Listening... (Click to stop)';
                     btn.style.backgroundColor = '#27ae60';
                     status.innerHTML = '<span style="color: green;">🎤 Listening... Speak now!</span>';
                     
-                    recognition.onresult = function(event) {
-                        const transcript = event.results[0][0].transcript;
+                    recognition.onresult = function(event) {{
+                        const transcript = event.results[0][0].transcript.trim();
                         status.innerHTML = '<span style="color: green;">✅ Heard: ' + transcript + '</span>';
                         
-                        // Store transcript in session storage for Streamlit to pick up
-                        sessionStorage.setItem('voiceInput', transcript);
+                        // Send to Streamlit using parent.postMessage
+                        if (window.parent && window.parent.postMessage) {{
+                            window.parent.postMessage({{
+                                type: 'streamlit:setComponentValue',
+                                value: transcript
+                            }}, '*');
+                        }}
                         
-                        // Trigger a custom event
-                        window.dispatchEvent(new Event('voiceInputReceived'));
-                    };
+                        // Also try using Streamlit's component communication
+                        try {{
+                            // Use Streamlit's component communication
+                            const streamlitDoc = window.parent.document || window.document;
+                            const streamlitWindow = window.parent || window;
+                            
+                            // Create a hidden input and trigger Streamlit
+                            const input = document.createElement('input');
+                            input.type = 'hidden';
+                            input.id = 'voiceInputValue';
+                            input.value = transcript;
+                            document.body.appendChild(input);
+                            
+                            // Trigger Streamlit rerun via URL parameter as fallback
+                            const currentUrl = window.location.href.split('?')[0];
+                            const newUrl = currentUrl + '?voice_input=' + encodeURIComponent(transcript) + '&_voice_timestamp=' + Date.now();
+                            window.location.href = newUrl;
+                        }} catch (e) {{
+                            console.error('Error sending voice input:', e);
+                            // Fallback: show message to user
+                            status.innerHTML += '<br><span style="color: orange;">⚠️ Processing... Please wait.</span>';
+                        }}
+                    }};
                     
-                    recognition.onerror = function(event) {
+                    recognition.onerror = function(event) {{
                         status.innerHTML = '<span style="color: red;">❌ Error: ' + event.error + '</span>';
                         btn.textContent = '🎤 Click to Record Voice';
                         btn.style.backgroundColor = '#e74c3c';
-                    };
+                        isRecording = false;
+                    }};
                     
-                    recognition.onend = function() {
+                    recognition.onend = function() {{
                         btn.textContent = '🎤 Click to Record Voice';
                         btn.style.backgroundColor = '#e74c3c';
-                        if (!status.innerHTML.includes('Heard:')) {
-                            status.innerHTML = '<span style="color: orange;">⚠️ Recognition ended</span>';
-                        }
-                    };
+                        isRecording = false;
+                        if (!status.innerHTML.includes('Heard:')) {{
+                            status.innerHTML = '<span style="color: orange;">⚠️ Recognition ended. Please try again.</span>';
+                        }}
+                    }};
                     
                     recognition.start();
-                    
-                    // Stop on button click again
-                    btn.onclick = function() {
-                        if (recognition) {
-                            recognition.stop();
-                            btn.onclick = startVoiceRecognition;
-                        }
-                    };
-                }
-                
-                // Listen for voice input events
-                window.addEventListener('voiceInputReceived', function() {
-                    const voiceText = sessionStorage.getItem('voiceInput');
-                    if (voiceText) {
-                        // Send to Streamlit via URL parameters or custom message
-                        window.location.href = window.location.href.split('?')[0] + '?voice_input=' + encodeURIComponent(voiceText);
-                    }
-                });
+                }}
                 </script>
                 """
                 
-                st.components.v1.html(voice_html, height=200)
+                # Use components.v1.html with key to ensure it updates
+                voice_component = st.components.v1.html(voice_html, height=150, key="voice_input_component")
                 
-                # Check for voice input from URL parameters
+                # Check for voice input from URL parameters (fallback method)
                 query_params = st.query_params
                 if "voice_input" in query_params:
-                    voice_text = query_params["voice_input"]
-                    if voice_text:
-                        st.success(f"🎤 Heard: *{voice_text}*")
-                        response = process_chat_message(st.session_state.user_id, voice_text)
+                    voice_text = query_params.get("voice_input", "").strip()
+                    if voice_text and voice_text != st.session_state.get("last_voice_input", ""):
+                        st.session_state.voice_input_text = voice_text
+                        st.session_state.voice_input_processed = False
+                        st.session_state.last_voice_input = voice_text
                         # Clear the parameter
-                        st.query_params.clear()
+                        new_params = {k: v for k, v in query_params.items() if k != "voice_input" and k != "_voice_timestamp"}
+                        st.query_params = new_params
                         st.rerun()
+                
+                # Debug info (can be removed in production)
+                if st.checkbox("🔍 Show voice input debug info", key="voice_debug"):
+                    st.write("Voice input state:", {
+                        "voice_input_text": st.session_state.get("voice_input_text"),
+                        "voice_input_processed": st.session_state.get("voice_input_processed"),
+                        "last_voice_input": st.session_state.get("last_voice_input"),
+                        "query_params": dict(query_params)
+                    })
         
         st.markdown("---")
         
