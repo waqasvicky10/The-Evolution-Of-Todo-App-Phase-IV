@@ -941,19 +941,21 @@ if st.session_state.logged_in and st.session_state.user_id:
                 # Initialize voice input state
                 if "voice_text_result" not in st.session_state:
                     st.session_state.voice_text_result = ""
+                if "voice_auto_submit" not in st.session_state:
+                    st.session_state.voice_auto_submit = False
                 
                 # Voice input text field (will be filled by JavaScript)
                 voice_text_input = st.text_input(
-                    "Voice input will appear here",
+                    "Voice input will appear here (then click Submit)",
                     value=st.session_state.voice_text_result,
                     key="voice_text_input",
-                    placeholder="Click voice button and speak..."
+                    placeholder="Click voice button and speak, then click Submit..."
                 )
                 
-                # Process voice input if available
-                if st.session_state.voice_text_result and st.session_state.voice_text_result.strip():
-                    voice_text = st.session_state.voice_text_result.strip()
-                    if voice_text:
+                # Submit button for voice input
+                if st.button("📤 Submit Voice Input", key="submit_voice", use_container_width=True, disabled=not voice_text_input.strip()):
+                    if voice_text_input and voice_text_input.strip():
+                        voice_text = voice_text_input.strip()
                         # Display in chat immediately
                         with st.chat_message("user"):
                             st.write(voice_text)
@@ -977,7 +979,7 @@ if st.session_state.logged_in and st.session_state.user_id:
                             st.session_state.voice_text_result = ""
                             st.rerun()
                 
-                # Create HTML/JS component for voice input
+                # Create HTML/JS component for voice input (no navigation, just fills input)
                 voice_html = """
                 <div style="margin: 10px 0;">
                     <button id="voiceBtn" onclick="startVoiceRecognition()" 
@@ -1034,32 +1036,42 @@ if st.session_state.logged_in and st.session_state.user_id:
                             const transcript = event.results[0][0].transcript.trim();
                             status.innerHTML = '<span style="color: green;">✅ Heard: ' + transcript + '</span>';
                             
-                            // Fill the text input field
+                            // Try to fill the text input using postMessage (safe for sandboxed iframes)
                             try {
-                                // Find the voice text input field
-                                const inputs = window.parent.document.querySelectorAll('input[data-testid*="text_input"], input[placeholder*="Voice input"]');
-                                if (inputs.length > 0) {
-                                    const voiceInput = inputs[inputs.length - 1];
-                                    voiceInput.value = transcript;
-                                    voiceInput.dispatchEvent(new Event('input', { bubbles: true }));
-                                    voiceInput.dispatchEvent(new Event('change', { bubbles: true }));
-                                    
-                                    // Trigger Streamlit update via URL parameter
-                                    const currentUrl = window.location.href.split('?')[0];
-                                    const newUrl = currentUrl + '?voice_input=' + encodeURIComponent(transcript) + '&_voice_timestamp=' + Date.now();
-                                    window.parent.location.href = newUrl;
-                                } else {
-                                    // Fallback: use URL parameter
-                                    const currentUrl = window.location.href.split('?')[0];
-                                    const newUrl = currentUrl + '?voice_input=' + encodeURIComponent(transcript) + '&_voice_timestamp=' + Date.now();
-                                    window.parent.location.href = newUrl;
+                                // Send message to parent window
+                                if (window.parent && window.parent !== window) {
+                                    window.parent.postMessage({
+                                        type: 'voice_input',
+                                        text: transcript
+                                    }, '*');
                                 }
+                                
+                                // Also try to find and fill input in current frame
+                                setTimeout(function() {
+                                    try {
+                                        // Look for input fields in the parent document
+                                        const parentDoc = window.parent.document;
+                                        if (parentDoc) {
+                                            const inputs = parentDoc.querySelectorAll('input[type="text"], input[placeholder*="Voice"], input[data-testid*="text_input"]');
+                                            for (let i = 0; i < inputs.length; i++) {
+                                                const input = inputs[i];
+                                                if (input.placeholder && input.placeholder.includes('Voice')) {
+                                                    input.value = transcript;
+                                                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                                                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    } catch (e) {
+                                        console.log('Could not fill input directly:', e);
+                                    }
+                                }, 100);
+                                
+                                status.innerHTML += '<br><span style="color: blue;">💡 Text filled! Click "Submit Voice Input" button above.</span>';
                             } catch (e) {
                                 console.error('Error setting voice input:', e);
-                                // Fallback: use URL parameter
-                                const currentUrl = window.location.href.split('?')[0];
-                                const newUrl = currentUrl + '?voice_input=' + encodeURIComponent(transcript) + '&_voice_timestamp=' + Date.now();
-                                window.parent.location.href = newUrl;
+                                status.innerHTML += '<br><span style="color: orange;">⚠️ Please copy this text and paste it: ' + transcript + '</span>';
                             }
                         };
                         
@@ -1081,14 +1093,25 @@ if st.session_state.logged_in and st.session_state.user_id:
                         
                         recognition.start();
                     };
+                    
+                    // Listen for messages from iframe (if needed)
+                    window.addEventListener('message', function(event) {
+                        if (event.data && event.data.type === 'voice_input') {
+                            console.log('Received voice input:', event.data.text);
+                        }
+                    });
                 })();
                 </script>
                 """
                 
                 # Use components.v1.html
-                st.components.v1.html(voice_html, height=150)
+                st.components.v1.html(voice_html, height=180)
                 
-                # Check for voice input from URL parameters
+                # Listen for postMessage from iframe (alternative method)
+                # Note: This won't work directly, so we rely on the text input being filled
+                # and the user clicking submit, or we use URL parameters as fallback
+                
+                # Check for voice input from URL parameters (fallback method)
                 query_params = st.query_params
                 if "voice_input" in query_params:
                     voice_text = query_params.get("voice_input", "").strip()
