@@ -934,102 +934,65 @@ if st.session_state.logged_in and st.session_state.user_id:
                     st.rerun()
         
         with col2:
-            # Voice input using browser's Web Speech API
+            # Simplified voice input - just show transcribed text for manual copy
             if VOICE_INPUT_AVAILABLE:
-                st.markdown("**Or use voice:**")
+                st.markdown("**Or use voice (experimental):**")
+                st.info("💡 **Note:** Due to browser security, voice input may require manual copy/paste. The transcribed text will appear below - just copy and paste it into the text input above.")
                 
-                # Check for voice input from URL parameters first (this works in sandbox)
+                # Check for voice input from URL parameters
                 query_params = st.query_params
                 if "voice_input" in query_params:
                     voice_text_from_url = query_params.get("voice_input", "").strip()
                     if voice_text_from_url:
-                        # Auto-fill the input and process
-                        st.session_state.voice_text_result = voice_text_from_url
-                        st.session_state.process_voice_input = True
-                        st.session_state.voice_text_to_process = voice_text_from_url
-                        # Clear the parameter
-                        new_params = {k: v for k, v in query_params.items() if k != "voice_input" and k != "_voice_timestamp"}
-                        st.query_params = new_params
-                        st.rerun()
-                
-                # Initialize voice input state
-                if "voice_text_result" not in st.session_state:
-                    st.session_state.voice_text_result = ""
-                if "process_voice_input" not in st.session_state:
-                    st.session_state.process_voice_input = False
-                
-                # Voice input text field
-                voice_text_input = st.text_input(
-                    "Voice input (speak or type)",
-                    value=st.session_state.voice_text_result,
-                    key="voice_text_input",
-                    placeholder="Click voice button and speak, or type your message..."
-                )
-                
-                # Update session state when input changes
-                if voice_text_input != st.session_state.voice_text_result:
-                    st.session_state.voice_text_result = voice_text_input
-                
-                # Submit button for voice input (always enabled)
-                col_submit1, col_submit2 = st.columns([1, 1])
-                with col_submit1:
-                    if st.button("📤 Submit Voice Input", key="submit_voice", use_container_width=True):
-                        if voice_text_input and voice_text_input.strip():
-                            voice_text = voice_text_input.strip()
-                            # Process the voice input
-                            st.session_state.process_voice_input = True
-                            st.session_state.voice_text_to_process = voice_text
+                        # Show the voice text in a text area for easy copy
+                        st.text_area(
+                            "🎤 Voice Input (Copy this text and paste above)",
+                            value=voice_text_from_url,
+                            height=60,
+                            key="voice_result_display",
+                            disabled=True
+                        )
+                        if st.button("📋 Copy & Use Voice Input", key="use_voice_input", use_container_width=True):
+                            # Process directly
+                            voice_text = voice_text_from_url
+                            # Display in chat
+                            with st.chat_message("user"):
+                                st.write(voice_text)
+                            
+                            try:
+                                with st.spinner("🤔 Processing your voice command..."):
+                                    response = process_chat_message(st.session_state.user_id, voice_text)
+                                
+                                # Display response
+                                with st.chat_message("assistant"):
+                                    st.markdown(response)
+                                
+                                # Clear the parameter
+                                new_params = {k: v for k, v in query_params.items() if k != "voice_input" and k != "_voice_timestamp"}
+                                st.query_params = new_params
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Error: {str(e)}")
+                                import traceback
+                                with st.expander("🔍 Error details"):
+                                    st.code(traceback.format_exc())
+                        
+                        # Clear the parameter after showing
+                        if st.button("🗑️ Clear", key="clear_voice_url"):
+                            new_params = {k: v for k, v in query_params.items() if k != "voice_input" and k != "_voice_timestamp"}
+                            st.query_params = new_params
                             st.rerun()
-                        else:
-                            st.warning("Please enter some text first (use voice button or type manually)")
                 
-                with col_submit2:
-                    if st.button("🗑️ Clear", key="clear_voice", use_container_width=True):
-                        st.session_state.voice_text_result = ""
-                        st.session_state.process_voice_input = False
-                        st.rerun()
-                
-                # Process voice input if flag is set
-                if st.session_state.get("process_voice_input", False) and st.session_state.get("voice_text_to_process"):
-                    voice_text = st.session_state.voice_text_to_process
-                    
-                    # Display in chat immediately
-                    with st.chat_message("user"):
-                        st.write(voice_text)
-                    
-                    try:
-                        with st.spinner("🤔 Processing your voice command..."):
-                            response = process_chat_message(st.session_state.user_id, voice_text)
-                        
-                        # Display response
-                        with st.chat_message("assistant"):
-                            st.markdown(response)
-                        
-                        # Clear voice input and reset flags
-                        st.session_state.voice_text_result = ""
-                        st.session_state.process_voice_input = False
-                        st.session_state.voice_text_to_process = ""
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"❌ Error processing voice input: {str(e)}")
-                        import traceback
-                        with st.expander("🔍 Error details (click to expand)"):
-                            st.code(traceback.format_exc())
-                        # Clear flags
-                        st.session_state.process_voice_input = False
-                        st.session_state.voice_text_to_process = ""
-                        st.rerun()
-                
-                # Create HTML/JS component for voice input (no navigation, just fills input)
+                # Simple voice recorder component
                 voice_html = """
                 <div style="margin: 10px 0;">
                     <button id="voiceBtn" onclick="startVoiceRecognition()" 
                             style="background-color: #e74c3c; color: white; border: none; 
-                                   padding: 10px 20px; border-radius: 5px; cursor: pointer;
-                                   font-size: 16px; width: 100%;">
+                                   padding: 12px 24px; border-radius: 5px; cursor: pointer;
+                                   font-size: 16px; width: 100%; font-weight: bold;">
                         🎤 Click to Record Voice
                     </button>
-                    <div id="voiceStatus" style="margin-top: 10px; color: #666; font-size: 14px; min-height: 20px;"></div>
+                    <div id="voiceStatus" style="margin-top: 10px; color: #666; font-size: 14px; min-height: 40px; padding: 10px; background: #f8f9fa; border-radius: 5px;"></div>
                 </div>
                 
                 <script>
@@ -1041,19 +1004,13 @@ if st.session_state.logged_in and st.session_state.user_id:
                         const btn = document.getElementById('voiceBtn');
                         const status = document.getElementById('voiceStatus');
                         
-                        if (!btn || !status) {
-                            console.error('Voice button or status element not found');
-                            return;
-                        }
+                        if (!btn || !status) return;
                         
                         if (isRecording) {
-                            if (recognition) {
-                                recognition.stop();
-                            }
+                            if (recognition) recognition.stop();
                             isRecording = false;
                             btn.textContent = '🎤 Click to Record Voice';
                             btn.style.backgroundColor = '#e74c3c';
-                            status.innerHTML = '<span style="color: orange;">⏹️ Stopped recording</span>';
                             return;
                         }
                         
@@ -1071,27 +1028,25 @@ if st.session_state.logged_in and st.session_state.user_id:
                         isRecording = true;
                         btn.textContent = '🎤 Listening... (Click to stop)';
                         btn.style.backgroundColor = '#27ae60';
-                        status.innerHTML = '<span style="color: green;">🎤 Listening... Speak now!</span>';
+                        status.innerHTML = '<span style="color: green; font-weight: bold;">🎤 Listening... Speak now!</span>';
                         
                         recognition.onresult = function(event) {
                             const transcript = event.results[0][0].transcript.trim();
-                            status.innerHTML = '<span style="color: green;">✅ Heard: ' + transcript + '</span>';
                             
-                            // Use URL parameters to pass voice input (works in sandbox)
+                            // Show the transcript clearly
+                            status.innerHTML = '<div style="background: #d4edda; padding: 15px; border-radius: 5px; border: 2px solid #28a745;">' +
+                                '<span style="color: green; font-weight: bold; font-size: 16px;">✅ Heard: ' + transcript + '</span><br><br>' +
+                                '<span style="color: #155724;">Processing...</span>' +
+                                '</div>';
+                            
+                            // Use URL parameter (works in sandbox)
                             try {
-                                // Get current URL and add voice_input parameter
-                                const currentUrl = new URL(window.location.href);
-                                currentUrl.searchParams.set('voice_input', transcript);
-                                currentUrl.searchParams.set('_voice_timestamp', Date.now().toString());
-                                
-                                // Navigate to new URL (this works even in sandbox)
-                                window.location.href = currentUrl.toString();
-                                
-                                status.innerHTML += '<br><span style="color: blue;">💡 Processing...</span>';
+                                const url = new URL(window.location.href);
+                                url.searchParams.set('voice_input', transcript);
+                                url.searchParams.set('_voice_timestamp', Date.now());
+                                window.location.href = url.toString();
                             } catch (e) {
-                                console.error('Error setting voice input:', e);
-                                // Fallback: show text for manual copy
-                                status.innerHTML += '<br><span style="color: orange; font-weight: bold; background: #fff3cd; padding: 5px; border-radius: 3px; display: inline-block; margin-top: 5px;">📝 Please copy this text: <strong>' + transcript + '</strong></span>';
+                                status.innerHTML += '<br><span style="color: red;">Error: ' + e.message + '</span>';
                             }
                         };
                         
@@ -1106,42 +1061,15 @@ if st.session_state.logged_in and st.session_state.user_id:
                             btn.textContent = '🎤 Click to Record Voice';
                             btn.style.backgroundColor = '#e74c3c';
                             isRecording = false;
-                            if (!status.innerHTML.includes('Heard:')) {
-                                status.innerHTML = '<span style="color: orange;">⚠️ Recognition ended. Please try again.</span>';
-                            }
                         };
                         
                         recognition.start();
                     };
-                    
-                    // Listen for messages from iframe (if needed)
-                    window.addEventListener('message', function(event) {
-                        if (event.data && event.data.type === 'voice_input') {
-                            console.log('Received voice input:', event.data.text);
-                        }
-                    });
                 })();
                 </script>
                 """
                 
-                # Use components.v1.html
-                st.components.v1.html(voice_html, height=180)
-                
-                # Listen for postMessage from iframe (alternative method)
-                # Note: This won't work directly, so we rely on the text input being filled
-                # and the user clicking submit, or we use URL parameters as fallback
-                
-                # Check for voice input from URL parameters (fallback method)
-                query_params = st.query_params
-                if "voice_input" in query_params:
-                    voice_text = query_params.get("voice_input", "").strip()
-                    if voice_text:
-                        # Set the voice text result
-                        st.session_state.voice_text_result = voice_text
-                        # Clear the parameter
-                        new_params = {k: v for k, v in query_params.items() if k != "voice_input" and k != "_voice_timestamp"}
-                        st.query_params = new_params
-                        st.rerun()
+                st.components.v1.html(voice_html, height=150)
         
         st.markdown("---")
         
