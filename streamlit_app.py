@@ -1063,39 +1063,55 @@ if st.session_state.logged_in and st.session_state.user_id:
                             const transcript = event.results[0][0].transcript.trim();
                             status.innerHTML = '<span style="color: green;">✅ Heard: ' + transcript + '</span>';
                             
-                            // Try to fill the text input using postMessage (safe for sandboxed iframes)
+                            // Try to fill the text input field
                             try {
-                                // Send message to parent window
+                                // Method 1: Try to find input in parent document
+                                setTimeout(function() {
+                                    try {
+                                        const parentDoc = window.parent.document;
+                                        if (parentDoc) {
+                                            // Look for the voice input field by placeholder
+                                            const inputs = parentDoc.querySelectorAll('input[type="text"]');
+                                            for (let i = 0; i < inputs.length; i++) {
+                                                const input = inputs[i];
+                                                const placeholder = input.getAttribute('placeholder') || '';
+                                                const label = input.getAttribute('aria-label') || '';
+                                                
+                                                if (placeholder.includes('Voice') || placeholder.includes('voice') || 
+                                                    label.includes('Voice') || label.includes('voice')) {
+                                                    input.value = transcript;
+                                                    input.focus();
+                                                    
+                                                    // Trigger events to notify Streamlit
+                                                    const inputEvent = new Event('input', { bubbles: true, cancelable: true });
+                                                    const changeEvent = new Event('change', { bubbles: true, cancelable: true });
+                                                    input.dispatchEvent(inputEvent);
+                                                    input.dispatchEvent(changeEvent);
+                                                    
+                                                    // Also try keyup event
+                                                    const keyupEvent = new KeyboardEvent('keyup', { bubbles: true, cancelable: true, key: 'Enter' });
+                                                    input.dispatchEvent(keyupEvent);
+                                                    
+                                                    status.innerHTML += '<br><span style="color: blue;">💡 Text filled! Click "Submit Voice Input" button above.</span>';
+                                                    return;
+                                                }
+                                            }
+                                        }
+                                    } catch (e) {
+                                        console.log('Could not fill input in parent:', e);
+                                    }
+                                    
+                                    // Method 2: Show transcript for manual copy
+                                    status.innerHTML += '<br><span style="color: blue; font-weight: bold;">📝 Copy this text and paste it in the input field above: ' + transcript + '</span>';
+                                }, 200);
+                                
+                                // Also try postMessage
                                 if (window.parent && window.parent !== window) {
                                     window.parent.postMessage({
                                         type: 'voice_input',
                                         text: transcript
                                     }, '*');
                                 }
-                                
-                                // Also try to find and fill input in current frame
-                                setTimeout(function() {
-                                    try {
-                                        // Look for input fields in the parent document
-                                        const parentDoc = window.parent.document;
-                                        if (parentDoc) {
-                                            const inputs = parentDoc.querySelectorAll('input[type="text"], input[placeholder*="Voice"], input[data-testid*="text_input"]');
-                                            for (let i = 0; i < inputs.length; i++) {
-                                                const input = inputs[i];
-                                                if (input.placeholder && input.placeholder.includes('Voice')) {
-                                                    input.value = transcript;
-                                                    input.dispatchEvent(new Event('input', { bubbles: true }));
-                                                    input.dispatchEvent(new Event('change', { bubbles: true }));
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                    } catch (e) {
-                                        console.log('Could not fill input directly:', e);
-                                    }
-                                }, 100);
-                                
-                                status.innerHTML += '<br><span style="color: blue;">💡 Text filled! Click "Submit Voice Input" button above.</span>';
                             } catch (e) {
                                 console.error('Error setting voice input:', e);
                                 status.innerHTML += '<br><span style="color: orange;">⚠️ Please copy this text and paste it: ' + transcript + '</span>';
