@@ -938,13 +938,27 @@ if st.session_state.logged_in and st.session_state.user_id:
             if VOICE_INPUT_AVAILABLE:
                 st.markdown("**Or use voice:**")
                 
+                # Check for voice input from URL parameters first (this works in sandbox)
+                query_params = st.query_params
+                if "voice_input" in query_params:
+                    voice_text_from_url = query_params.get("voice_input", "").strip()
+                    if voice_text_from_url:
+                        # Auto-fill the input and process
+                        st.session_state.voice_text_result = voice_text_from_url
+                        st.session_state.process_voice_input = True
+                        st.session_state.voice_text_to_process = voice_text_from_url
+                        # Clear the parameter
+                        new_params = {k: v for k, v in query_params.items() if k != "voice_input" and k != "_voice_timestamp"}
+                        st.query_params = new_params
+                        st.rerun()
+                
                 # Initialize voice input state
                 if "voice_text_result" not in st.session_state:
                     st.session_state.voice_text_result = ""
                 if "process_voice_input" not in st.session_state:
                     st.session_state.process_voice_input = False
                 
-                # Voice input text field (will be filled by JavaScript or manually)
+                # Voice input text field
                 voice_text_input = st.text_input(
                     "Voice input (speak or type)",
                     value=st.session_state.voice_text_result,
