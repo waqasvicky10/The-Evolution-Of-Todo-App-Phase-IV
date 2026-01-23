@@ -934,27 +934,36 @@ if st.session_state.logged_in and st.session_state.user_id:
                     st.rerun()
         
         with col2:
-            # Simplified voice input - just show transcribed text for manual copy
+            # Simplified voice input - show transcribed text clearly
             if VOICE_INPUT_AVAILABLE:
-                st.markdown("**Or use voice (experimental):**")
-                st.info("💡 **Note:** Due to browser security, voice input may require manual copy/paste. The transcribed text will appear below - just copy and paste it into the text input above.")
+                st.markdown("**Or use voice:**")
                 
                 # Check for voice input from URL parameters
                 query_params = st.query_params
+                voice_text_from_url = None
                 if "voice_input" in query_params:
                     voice_text_from_url = query_params.get("voice_input", "").strip()
-                    if voice_text_from_url:
-                        # Show the voice text in a text area for easy copy
-                        st.text_area(
-                            "🎤 Voice Input (Copy this text and paste above)",
-                            value=voice_text_from_url,
-                            height=60,
-                            key="voice_result_display",
-                            disabled=True
-                        )
-                        if st.button("📋 Copy & Use Voice Input", key="use_voice_input", use_container_width=True):
+                
+                # Store voice text in session state for persistence
+                if voice_text_from_url:
+                    if "last_voice_input" not in st.session_state or st.session_state.last_voice_input != voice_text_from_url:
+                        st.session_state.voice_text_result = voice_text_from_url
+                        st.session_state.last_voice_input = voice_text_from_url
+                
+                # Show voice input result if available
+                if st.session_state.get("voice_text_result"):
+                    st.markdown("---")
+                    st.markdown("### 🎤 Voice Input Result")
+                    
+                    # Display in a prominent box
+                    voice_text = st.session_state.voice_text_result
+                    st.success(f"**Heard:** {voice_text}")
+                    
+                    # Buttons to use or clear
+                    col_use, col_clear = st.columns([2, 1])
+                    with col_use:
+                        if st.button("✅ Use This Voice Input", key="use_voice_input", use_container_width=True, type="primary"):
                             # Process directly
-                            voice_text = voice_text_from_url
                             # Display in chat
                             with st.chat_message("user"):
                                 st.write(voice_text)
@@ -967,21 +976,32 @@ if st.session_state.logged_in and st.session_state.user_id:
                                 with st.chat_message("assistant"):
                                     st.markdown(response)
                                 
-                                # Clear the parameter
-                                new_params = {k: v for k, v in query_params.items() if k != "voice_input" and k != "_voice_timestamp"}
-                                st.query_params = new_params
+                                # Clear voice input
+                                st.session_state.voice_text_result = ""
+                                st.session_state.last_voice_input = ""
+                                # Clear URL parameter
+                                if "voice_input" in query_params:
+                                    new_params = {k: v for k, v in query_params.items() if k != "voice_input" and k != "_voice_timestamp"}
+                                    st.query_params = new_params
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"❌ Error: {str(e)}")
                                 import traceback
                                 with st.expander("🔍 Error details"):
                                     st.code(traceback.format_exc())
-                        
-                        # Clear the parameter after showing
-                        if st.button("🗑️ Clear", key="clear_voice_url"):
-                            new_params = {k: v for k, v in query_params.items() if k != "voice_input" and k != "_voice_timestamp"}
-                            st.query_params = new_params
+                    
+                    with col_clear:
+                        if st.button("🗑️ Clear", key="clear_voice_result", use_container_width=True):
+                            st.session_state.voice_text_result = ""
+                            st.session_state.last_voice_input = ""
+                            if "voice_input" in query_params:
+                                new_params = {k: v for k, v in query_params.items() if k != "voice_input" and k != "_voice_timestamp"}
+                                st.query_params = new_params
                             st.rerun()
+                    
+                    st.markdown("---")
+                else:
+                    st.info("💡 Click the voice button below, speak your command, and the transcribed text will appear here.")
                 
                 # Simple voice recorder component
                 voice_html = """
