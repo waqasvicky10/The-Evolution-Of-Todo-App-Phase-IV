@@ -1026,8 +1026,8 @@ if st.session_state.logged_in and st.session_state.user_id:
                 </script>
                 """
                 
-                # Use components.v1.html with key to ensure it updates
-                voice_component = st.components.v1.html(voice_html, height=150, key="voice_input_component")
+                # Use components.v1.html (key parameter not supported)
+                voice_component = st.components.v1.html(voice_html, height=150)
                 
                 # Check for voice input from URL parameters (fallback method)
                 query_params = st.query_params
