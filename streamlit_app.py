@@ -868,14 +868,24 @@ if st.session_state.logged_in and st.session_state.user_id:
         chat_container = st.container()
         with chat_container:
             # Display conversation history
-            history = get_conversation_history(st.session_state.user_id, limit=50)
-            for msg in history:
-                if msg["role"] == "user":
-                    with st.chat_message("user"):
-                        st.write(msg["content"])
+            try:
+                history = get_conversation_history(st.session_state.user_id, limit=50)
+                if history:
+                    for msg in history:
+                        if msg["role"] == "user":
+                            with st.chat_message("user"):
+                                st.write(msg["content"])
+                        else:
+                            with st.chat_message("assistant"):
+                                st.markdown(msg["content"])
                 else:
+                    # Show welcome message if no history
                     with st.chat_message("assistant"):
-                        st.markdown(msg["content"])
+                        st.markdown("👋 Hi! I'm your AI Todo Assistant. I can help you:\n\n- **Add tasks** (e.g., 'Add task to buy groceries')\n- **List tasks** (e.g., 'Show my tasks')\n- **Complete tasks** (e.g., 'Mark grocery task as done')\n- **Update tasks** (e.g., 'Change grocery task to buy organic groceries')\n- **Delete tasks** (e.g., 'Delete grocery task')\n\nTry typing a command or use voice input below!")
+            except Exception as e:
+                st.error(f"Error loading conversation history: {str(e)}")
+                with st.chat_message("assistant"):
+                    st.markdown("👋 Hi! I'm your AI Todo Assistant. How can I help you today?")
         
         # Voice input section (Phase III optional feature)
         st.markdown("---")
@@ -885,18 +895,41 @@ if st.session_state.logged_in and st.session_state.user_id:
         
         with col1:
             # Text input
+            st.markdown("**Type your message:**")
             if prompt := st.chat_input("Type your message here..."):
+                # Validate prompt
+                if not prompt or not prompt.strip():
+                    st.warning("Please enter a message.")
+                    st.rerun()
+                
                 # Process message
                 try:
                     with st.spinner("🤔 Processing your message..."):
-                        response = process_chat_message(st.session_state.user_id, prompt)
-                    # Force rerun to show response
+                        # Store user message immediately for display
+                        with st.chat_message("user"):
+                            st.write(prompt)
+                        
+                        # Process and get response
+                        response = process_chat_message(st.session_state.user_id, prompt.strip())
+                        
+                        # Display response immediately
+                        with st.chat_message("assistant"):
+                            st.markdown(response)
+                    
+                    # Force rerun to refresh conversation history
                     st.rerun()
                 except Exception as e:
-                    st.error(f"❌ Error processing message: {str(e)}")
+                    error_msg = str(e)
+                    st.error(f"❌ Error processing message: {error_msg}")
+                    
+                    # Show error in chat
+                    with st.chat_message("assistant"):
+                        st.error(f"I encountered an error: {error_msg}\n\nPlease try rephrasing your request or try again.")
+                    
                     import traceback
                     with st.expander("🔍 Error details (click to expand)"):
                         st.code(traceback.format_exc())
+                    
                     # Still rerun to show error
                     st.rerun()
         
