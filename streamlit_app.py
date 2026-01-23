@@ -943,12 +943,14 @@ if st.session_state.logged_in and st.session_state.user_id:
                 voice_text_from_url = None
                 if "voice_input" in query_params:
                     voice_text_from_url = query_params.get("voice_input", "").strip()
-                
-                # Store voice text in session state for persistence
-                if voice_text_from_url:
-                    if "last_voice_input" not in st.session_state or st.session_state.last_voice_input != voice_text_from_url:
+                    # Debug: show what we got
+                    if voice_text_from_url:
                         st.session_state.voice_text_result = voice_text_from_url
                         st.session_state.last_voice_input = voice_text_from_url
+                        # Clear URL param and rerun to show it
+                        new_params = {k: v for k, v in query_params.items() if k != "voice_input" and k != "_voice_timestamp"}
+                        st.query_params = new_params
+                        st.rerun()
                 
                 # Show voice input result if available
                 if st.session_state.get("voice_text_result"):
@@ -957,7 +959,7 @@ if st.session_state.logged_in and st.session_state.user_id:
                     
                     # Display in a prominent box
                     voice_text = st.session_state.voice_text_result
-                    st.success(f"**Heard:** {voice_text}")
+                    st.success(f"**✅ Heard:** {voice_text}")
                     
                     # Buttons to use or clear
                     col_use, col_clear = st.columns([2, 1])
@@ -979,10 +981,6 @@ if st.session_state.logged_in and st.session_state.user_id:
                                 # Clear voice input
                                 st.session_state.voice_text_result = ""
                                 st.session_state.last_voice_input = ""
-                                # Clear URL parameter
-                                if "voice_input" in query_params:
-                                    new_params = {k: v for k, v in query_params.items() if k != "voice_input" and k != "_voice_timestamp"}
-                                    st.query_params = new_params
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"❌ Error: {str(e)}")
@@ -994,9 +992,6 @@ if st.session_state.logged_in and st.session_state.user_id:
                         if st.button("🗑️ Clear", key="clear_voice_result", use_container_width=True):
                             st.session_state.voice_text_result = ""
                             st.session_state.last_voice_input = ""
-                            if "voice_input" in query_params:
-                                new_params = {k: v for k, v in query_params.items() if k != "voice_input" and k != "_voice_timestamp"}
-                                st.query_params = new_params
                             st.rerun()
                     
                     st.markdown("---")
