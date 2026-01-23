@@ -888,14 +888,17 @@ if st.session_state.logged_in and st.session_state.user_id:
             if prompt := st.chat_input("Type your message here..."):
                 # Process message
                 try:
-                    response = process_chat_message(st.session_state.user_id, prompt)
+                    with st.spinner("🤔 Processing your message..."):
+                        response = process_chat_message(st.session_state.user_id, prompt)
                     # Force rerun to show response
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Error processing message: {str(e)}")
+                    st.error(f"❌ Error processing message: {str(e)}")
                     import traceback
-                    with st.expander("Error details"):
+                    with st.expander("🔍 Error details (click to expand)"):
                         st.code(traceback.format_exc())
+                    # Still rerun to show error
+                    st.rerun()
         
         with col2:
             # Voice input using browser's Web Speech API
@@ -913,14 +916,19 @@ if st.session_state.logged_in and st.session_state.user_id:
                     voice_text = st.session_state.voice_input_text
                     st.success(f"🎤 Heard: *{voice_text}*")
                     try:
-                        response = process_chat_message(st.session_state.user_id, voice_text)
+                        with st.spinner("🤔 Processing your voice command..."):
+                            response = process_chat_message(st.session_state.user_id, voice_text)
                         st.session_state.voice_input_processed = True
                         st.session_state.voice_input_text = None
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Error processing voice input: {str(e)}")
+                        st.error(f"❌ Error processing voice input: {str(e)}")
+                        import traceback
+                        with st.expander("🔍 Error details (click to expand)"):
+                            st.code(traceback.format_exc())
                         st.session_state.voice_input_processed = True
                         st.session_state.voice_input_text = None
+                        st.rerun()
                 
                 # Create HTML/JS component for voice input (simplified)
                 voice_html = """
