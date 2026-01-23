@@ -1048,13 +1048,15 @@ if st.session_state.logged_in and st.session_state.user_id:
                         recognition.onresult = function(event) {
                             const transcript = event.results[0][0].transcript.trim();
                             
-                            // Show the transcript clearly
-                            status.innerHTML = '<div style="background: #d4edda; padding: 15px; border-radius: 5px; border: 2px solid #28a745;">' +
-                                '<span style="color: green; font-weight: bold; font-size: 16px;">✅ Heard: ' + transcript + '</span><br><br>' +
-                                '<span style="color: #155724;">Processing...</span>' +
+                            // Always show the transcript prominently first
+                            status.innerHTML = '<div style="background: #d4edda; padding: 20px; border-radius: 8px; border: 3px solid #28a745; margin-top: 15px;">' +
+                                '<div style="color: green; font-weight: bold; font-size: 18px; margin-bottom: 15px;">✅ Voice Input Captured!</div>' +
+                                '<div style="background: white; padding: 15px; border-radius: 5px; font-size: 18px; font-weight: bold; color: #155724; margin-bottom: 15px; border: 2px solid #28a745; word-break: break-word;">' + transcript + '</div>' +
+                                '<div style="color: #155724; font-weight: bold; margin-bottom: 10px;">🔄 Attempting to process...</div>' +
                                 '</div>';
                             
-                            // Use URL parameter (works in sandbox) - use simple string manipulation
+                            // Try URL parameter approach
+                            let urlSuccess = false;
                             try {
                                 // Get base URL without query params
                                 let baseUrl = window.location.href;
@@ -1067,15 +1069,26 @@ if st.session_state.logged_in and st.session_state.user_id:
                                 const separator = baseUrl.includes('?') ? '&' : '?';
                                 const newUrl = baseUrl + separator + 'voice_input=' + encodeURIComponent(transcript) + '&_voice_timestamp=' + Date.now();
                                 
-                                // Navigate to new URL
+                                // Try to navigate
                                 setTimeout(function() {
-                                    window.location.href = newUrl;
-                                }, 500); // Small delay to show the message
+                                    try {
+                                        window.location.href = newUrl;
+                                        urlSuccess = true;
+                                    } catch (navError) {
+                                        // Navigation failed - show manual copy option
+                                        status.innerHTML += '<div style="background: #fff3cd; padding: 20px; border-radius: 8px; margin-top: 15px; border: 3px solid #ffc107;">' +
+                                            '<div style="color: #856404; font-weight: bold; font-size: 16px; margin-bottom: 15px;">📝 Please copy this text and paste it in the text input above (left column):</div>' +
+                                            '<div style="background: white; padding: 15px; border-radius: 5px; font-size: 18px; font-weight: bold; color: #856404; border: 2px solid #ffc107; word-break: break-word; cursor: text; user-select: all;">' + transcript + '</div>' +
+                                            '<div style="color: #856404; margin-top: 10px; font-size: 14px;">💡 Click the text above to select it, then copy (Ctrl+C) and paste it in the input field.</div>' +
+                                            '</div>';
+                                    }
+                                }, 1000);
                             } catch (e) {
-                                // Fallback: show text for manual copy
-                                status.innerHTML += '<div style="background: #fff3cd; padding: 15px; border-radius: 5px; margin-top: 10px; border: 2px solid #ffc107;">' +
-                                    '<div style="color: #856404; font-weight: bold; margin-bottom: 10px;">⚠️ Please copy this text and paste it in the text input above:</div>' +
-                                    '<div style="background: white; padding: 10px; border-radius: 3px; font-size: 16px; font-weight: bold; color: #856404; border: 1px solid #ffc107;">' + transcript + '</div>' +
+                                // Error - show manual copy option
+                                status.innerHTML += '<div style="background: #fff3cd; padding: 20px; border-radius: 8px; margin-top: 15px; border: 3px solid #ffc107;">' +
+                                    '<div style="color: #856404; font-weight: bold; font-size: 16px; margin-bottom: 15px;">📝 Please copy this text and paste it in the text input above (left column):</div>' +
+                                    '<div style="background: white; padding: 15px; border-radius: 5px; font-size: 18px; font-weight: bold; color: #856404; border: 2px solid #ffc107; word-break: break-word; cursor: text; user-select: all;">' + transcript + '</div>' +
+                                    '<div style="color: #856404; margin-top: 10px; font-size: 14px;">💡 Click the text above to select it, then copy (Ctrl+C) and paste it in the input field.</div>' +
                                     '</div>';
                             }
                         };
