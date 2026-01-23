@@ -1054,14 +1054,29 @@ if st.session_state.logged_in and st.session_state.user_id:
                                 '<span style="color: #155724;">Processing...</span>' +
                                 '</div>';
                             
-                            // Use URL parameter (works in sandbox)
+                            // Use URL parameter (works in sandbox) - use simple string manipulation
                             try {
-                                const url = new URL(window.location.href);
-                                url.searchParams.set('voice_input', transcript);
-                                url.searchParams.set('_voice_timestamp', Date.now());
-                                window.location.href = url.toString();
+                                // Get base URL without query params
+                                let baseUrl = window.location.href;
+                                const qIndex = baseUrl.indexOf('?');
+                                if (qIndex > -1) {
+                                    baseUrl = baseUrl.substring(0, qIndex);
+                                }
+                                
+                                // Add voice input parameter
+                                const separator = baseUrl.includes('?') ? '&' : '?';
+                                const newUrl = baseUrl + separator + 'voice_input=' + encodeURIComponent(transcript) + '&_voice_timestamp=' + Date.now();
+                                
+                                // Navigate to new URL
+                                setTimeout(function() {
+                                    window.location.href = newUrl;
+                                }, 500); // Small delay to show the message
                             } catch (e) {
-                                status.innerHTML += '<br><span style="color: red;">Error: ' + e.message + '</span>';
+                                // Fallback: show text for manual copy
+                                status.innerHTML += '<div style="background: #fff3cd; padding: 15px; border-radius: 5px; margin-top: 10px; border: 2px solid #ffc107;">' +
+                                    '<div style="color: #856404; font-weight: bold; margin-bottom: 10px;">⚠️ Please copy this text and paste it in the text input above:</div>' +
+                                    '<div style="background: white; padding: 10px; border-radius: 3px; font-size: 16px; font-weight: bold; color: #856404; border: 1px solid #ffc107;">' + transcript + '</div>' +
+                                    '</div>';
                             }
                         };
                         
