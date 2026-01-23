@@ -429,15 +429,19 @@ def recognize_intent(message: str) -> Tuple[str, Dict]:
     """Recognize user intent from natural language (Phase III)."""
     message_lower = message.lower().strip()
     
-    # Create task intent
+    # Create task intent - more flexible patterns
     create_patterns = [
-        r"add\s+(?:a\s+)?(?:task|todo|item)\s+(?:to|for|about)?\s*(?:.*?)(?:to\s+)?(.+)",
+        r"add\s+(?:a\s+)?(?:task|todo|item)\s+(?:to|for|about|by)?\s*(?:.*?)(?:to\s+)?(.+)",
         r"create\s+(?:a\s+)?(?:task|todo|item)\s*(?:.*?)(?:to\s+)?(.+)",
         r"new\s+(?:task|todo|item)\s*(?:.*?)(?:to\s+)?(.+)",
         r"remind\s+me\s+(?:to\s+)?(.+)",
         r"i\s+need\s+(?:to\s+)?(.+)",
+        r"i\s+want\s+(?:to\s+)?(.+)",
+        r"can\s+you\s+add\s+(.+)",
+        r"please\s+add\s+(.+)",
         r"add\s+(.+)",
         r"create\s+(.+)",
+        r"^(.+?)(?:\s+to\s+my\s+list|\s+as\s+a\s+task|\s+task)$",  # "buy milk to my list"
     ]
     
     # List tasks intent
@@ -447,41 +451,59 @@ def recognize_intent(message: str) -> Tuple[str, Dict]:
         r"what\s+(?:are\s+)?(?:my\s+)?(?:tasks|todos)",
         r"display\s+(?:my\s+)?(?:tasks|todos)",
         r"view\s+(?:my\s+)?(?:tasks|todos)",
+        r"get\s+(?:my\s+)?(?:tasks|todos)",
+        r"see\s+(?:my\s+)?(?:tasks|todos)",
+        r"what\s+do\s+i\s+have",
+        r"what's\s+on\s+my\s+list",
     ]
     
     # Complete task intent
     complete_patterns = [
-        r"mark\s+(?:.*?)\s+(?:as\s+)?(?:done|complete|completed|finished)",
-        r"complete\s+(?:.*?)(?:task|todo)?",
-        r"(?:.*?)\s+is\s+(?:done|complete|completed|finished)",
-        r"finish\s+(?:.*?)(?:task|todo)?",
+        r"mark\s+(.+?)\s+(?:as\s+)?(?:done|complete|completed|finished)",
+        r"complete\s+(.+)",
+        r"(.+?)\s+is\s+(?:done|complete|completed|finished)",
+        r"finish\s+(.+)",
         r"check\s+off\s+(.+)",
         r"done\s+with\s+(.+)",
+        r"done\s+(.+)",
+        r"finish\s+(.+)",
+        r"complete\s+(.+)",
     ]
     
     # Update task intent
     update_patterns = [
-        r"change\s+(?:.*?)\s+to\s+(.+)",
-        r"update\s+(?:.*?)\s+to\s+(.+)",
-        r"modify\s+(?:.*?)\s+to\s+(.+)",
-        r"edit\s+(?:.*?)\s+to\s+(.+)",
-        r"rename\s+(?:.*?)\s+to\s+(.+)",
+        r"change\s+(.+?)\s+to\s+(.+)",
+        r"update\s+(.+?)\s+to\s+(.+)",
+        r"modify\s+(.+?)\s+to\s+(.+)",
+        r"edit\s+(.+?)\s+to\s+(.+)",
+        r"rename\s+(.+?)\s+to\s+(.+)",
+        r"change\s+(.+?)\s+from\s+(.+?)\s+to\s+(.+)",
     ]
     
     # Delete task intent
     delete_patterns = [
-        r"delete\s+(?:.*?)(?:task|todo)?",
-        r"remove\s+(?:.*?)(?:task|todo)?",
-        r"get\s+rid\s+of\s+(?:.*?)(?:task|todo)?",
-        r"remove\s+(?:.*?)(?:task|todo)?",
+        r"delete\s+(.+)",
+        r"remove\s+(.+)",
+        r"get\s+rid\s+of\s+(.+)",
+        r"erase\s+(.+)",
+        r"cancel\s+(.+)",
     ]
     
     # Check for create intent
     for pattern in create_patterns:
         match = re.search(pattern, message_lower)
         if match:
-            task_desc = match.group(1).strip() if match.groups() else message_lower.replace("add", "").replace("create", "").replace("new", "").replace("remind me to", "").replace("i need to", "").strip()
-            if task_desc:
+            task_desc = match.group(1).strip() if match.groups() else ""
+            # Fallback: extract description by removing common prefixes
+            if not task_desc or len(task_desc) < 3:
+                task_desc = message_lower
+                for prefix in ["add", "create", "new", "remind me to", "i need to", "i want to", "can you add", "please add"]:
+                    if task_desc.startswith(prefix):
+                        task_desc = task_desc[len(prefix):].strip()
+                        break
+            # Clean up common suffixes
+            task_desc = re.sub(r"\s+(?:to\s+my\s+list|as\s+a\s+task|task)$", "", task_desc, flags=re.IGNORECASE).strip()
+            if task_desc and len(task_desc) > 2:
                 return "create", {"description": task_desc}
     
     # Check for list intent
@@ -494,36 +516,83 @@ def recognize_intent(message: str) -> Tuple[str, Dict]:
         match = re.search(pattern, message_lower)
         if match:
             task_ref = match.group(1).strip() if match.groups() else ""
-            return "complete", {"task_reference": task_ref or message_lower}
+            if task_ref:
+                return "complete", {"task_reference": task_ref}
     
     # Check for update intent
     for pattern in update_patterns:
         match = re.search(pattern, message_lower)
         if match:
-            new_desc = match.group(1).strip() if match.groups() else ""
-            return "update", {"new_description": new_desc}
+            groups = match.groups()
+            if len(groups) >= 2:
+                task_ref = groups[0].strip()
+                new_desc = groups[-1].strip()  # Last group is usually the new description
+                return "update", {"task_reference": task_ref, "new_description": new_desc}
+            elif len(groups) == 1:
+                return "update", {"new_description": groups[0].strip()}
     
     # Check for delete intent
     for pattern in delete_patterns:
-        if re.search(pattern, message_lower):
-            return "delete", {"task_reference": message_lower}
+        match = re.search(pattern, message_lower)
+        if match:
+            task_ref = match.group(1).strip() if match.groups() else ""
+            if task_ref:
+                return "delete", {"task_reference": task_ref}
     
     return "unknown", {}
 
 
 def find_task_by_reference(user_id: int, reference: str) -> Optional[Dict]:
-    """Find task by description reference."""
+    """Find task by description reference with improved matching."""
+    if not reference or not reference.strip():
+        return None
+    
     tasks = get_user_tasks(user_id)
-    reference_lower = reference.lower()
-    for task in tasks:
-        if reference_lower in task["description"].lower() or task["description"].lower() in reference_lower:
-            return task
-    # Try to find by ID
-    if re.search(r"\d+", reference):
-        task_id = int(re.search(r"\d+", reference).group())
+    reference_lower = reference.lower().strip()
+    
+    # Try to find by ID first
+    id_match = re.search(r"\d+", reference)
+    if id_match:
+        task_id = int(id_match.group())
         for task in tasks:
             if task["id"] == task_id:
                 return task
+    
+    # Exact match
+    for task in tasks:
+        if task["description"].lower() == reference_lower:
+            return task
+    
+    # Substring match (reference in task description)
+    for task in tasks:
+        if reference_lower in task["description"].lower():
+            return task
+    
+    # Substring match (task description in reference)
+    for task in tasks:
+        task_desc_lower = task["description"].lower()
+        if task_desc_lower in reference_lower and len(task_desc_lower) > 3:
+            return task
+    
+    # Word-based matching (at least 2 words match)
+    reference_words = set(reference_lower.split())
+    if len(reference_words) >= 2:
+        for task in tasks:
+            task_words = set(task["description"].lower().split())
+            common_words = reference_words.intersection(task_words)
+            # If at least 2 significant words match
+            significant_common = [w for w in common_words if len(w) > 2]
+            if len(significant_common) >= 2:
+                return task
+    
+    # Single word match (if reference is a single significant word)
+    if len(reference_words) == 1:
+        ref_word = list(reference_words)[0]
+        if len(ref_word) > 3:
+            for task in tasks:
+                if ref_word in task["description"].lower().split():
+                    return task
+    
     return None
 
 
@@ -532,79 +601,156 @@ def process_chat_message(user_id: int, message: str) -> str:
     # Store user message
     store_message(user_id, "user", message)
     
+    # Get conversation history for context
+    history = get_conversation_history(user_id, limit=5)
+    
     # Recognize intent
     intent, params = recognize_intent(message)
     
     try:
         if intent == "create":
             description = params.get("description", "")
-            if not description:
-                response = "I'd be happy to add a task for you! What would you like to add to your todo list?"
+            if not description or len(description.strip()) < 2:
+                response = "I'd be happy to add a task for you! What would you like to add to your todo list?\n\nYou can say things like:\n- 'Add task to buy groceries'\n- 'Create a task for meeting'\n- 'Remind me to call mom'"
             else:
                 success, msg = create_task(user_id, description)
                 if success:
-                    response = f"I've added '{description}' to your todo list. ✅"
+                    response = f"✅ I've added '{description}' to your todo list!"
                 else:
                     response = f"I'm sorry, I couldn't add that task: {msg}"
         
         elif intent == "list":
             tasks = get_user_tasks(user_id)
             if not tasks:
-                response = "You don't have any tasks yet. Would you like to add one?"
+                response = "You don't have any tasks yet. Would you like to add one? Just say something like 'Add task to buy groceries'."
             else:
                 active = [t for t in tasks if not t["completed"]]
                 completed = [t for t in tasks if t["completed"]]
                 response = f"Here are your tasks:\n\n"
                 if active:
-                    response += f"**Active Tasks ({len(active)}):**\n"
+                    response += f"**🔄 Active Tasks ({len(active)}):**\n"
                     for i, task in enumerate(active, 1):
                         response += f"{i}. {task['description']}\n"
                 if completed:
-                    response += f"\n**Completed Tasks ({len(completed)}):**\n"
+                    response += f"\n**✅ Completed Tasks ({len(completed)}):**\n"
                     for i, task in enumerate(completed, 1):
                         response += f"{i}. ~~{task['description']}~~ ✅\n"
+                if not active and not completed:
+                    response = "You don't have any tasks yet."
         
         elif intent == "complete":
             task_ref = params.get("task_reference", "")
-            task = find_task_by_reference(user_id, task_ref)
-            if not task:
-                response = "I couldn't find that task. Would you like to see all your tasks?"
+            if not task_ref:
+                # Try to get from context or ask user
+                response = "Which task would you like to mark as complete? You can say the task description or number."
             else:
-                if task["completed"]:
-                    response = f"'{task['description']}' is already completed! ✅"
-                else:
-                    success, msg = update_task(user_id, task["id"], completed=True)
-                    if success:
-                        response = f"Great! I've marked '{task['description']}' as complete. Well done! ✅"
+                task = find_task_by_reference(user_id, task_ref)
+                if not task:
+                    # Show available tasks to help user
+                    tasks = get_user_tasks(user_id)
+                    active_tasks = [t for t in tasks if not t["completed"]]
+                    if active_tasks:
+                        response = f"I couldn't find a task matching '{task_ref}'. Here are your active tasks:\n\n"
+                        for i, t in enumerate(active_tasks, 1):
+                            response += f"{i}. {t['description']}\n"
+                        response += "\nWhich one would you like to complete?"
                     else:
-                        response = f"I'm sorry, I couldn't complete that task: {msg}"
+                        response = f"I couldn't find a task matching '{task_ref}'. You don't have any active tasks to complete."
+                else:
+                    if task["completed"]:
+                        response = f"'{task['description']}' is already completed! ✅"
+                    else:
+                        success, msg = update_task(user_id, task["id"], completed=True)
+                        if success:
+                            response = f"✅ Great! I've marked '{task['description']}' as complete. Well done!"
+                        else:
+                            response = f"I'm sorry, I couldn't complete that task: {msg}"
         
         elif intent == "update":
+            task_ref = params.get("task_reference", "")
             new_desc = params.get("new_description", "")
+            
             if not new_desc:
-                response = "I'd be happy to update a task for you! Which task would you like to update, and what should the new description be?"
+                response = "I'd be happy to update a task for you! Please tell me which task to update and what the new description should be.\n\nExample: 'Change grocery task to buy organic groceries'"
+            elif not task_ref:
+                # Try to find from context or ask
+                response = "Which task would you like to update? Please specify the task.\n\nExample: 'Change grocery task to buy organic groceries'"
             else:
-                # Try to find task from previous context or ask
-                response = "Which task would you like to update? Please specify the task to change."
+                task = find_task_by_reference(user_id, task_ref)
+                if not task:
+                    tasks = get_user_tasks(user_id)
+                    if tasks:
+                        response = f"I couldn't find a task matching '{task_ref}'. Here are your tasks:\n\n"
+                        for i, t in enumerate(tasks, 1):
+                            response += f"{i}. {t['description']}\n"
+                        response += "\nWhich one would you like to update?"
+                    else:
+                        response = f"I couldn't find a task matching '{task_ref}'. You don't have any tasks yet."
+                else:
+                    success, msg = update_task(user_id, task["id"], description=new_desc)
+                    if success:
+                        response = f"✅ I've updated '{task['description']}' to '{new_desc}'."
+                    else:
+                        response = f"I'm sorry, I couldn't update that task: {msg}"
         
         elif intent == "delete":
             task_ref = params.get("task_reference", "")
-            task = find_task_by_reference(user_id, task_ref)
-            if not task:
-                response = "I couldn't find that task to delete. Would you like to see all your tasks?"
+            if not task_ref:
+                response = "Which task would you like to delete? Please specify the task description or number."
             else:
-                # For deletion, we'd normally ask for confirmation, but for simplicity, we'll delete
-                success, msg = delete_task(user_id, task["id"])
-                if success:
-                    response = f"I've deleted '{task['description']}' from your todo list."
+                task = find_task_by_reference(user_id, task_ref)
+                if not task:
+                    tasks = get_user_tasks(user_id)
+                    if tasks:
+                        response = f"I couldn't find a task matching '{task_ref}'. Here are your tasks:\n\n"
+                        for i, t in enumerate(tasks, 1):
+                            response += f"{i}. {t['description']}\n"
+                        response += "\nWhich one would you like to delete?"
+                    else:
+                        response = f"I couldn't find a task matching '{task_ref}'. You don't have any tasks yet."
                 else:
-                    response = f"I'm sorry, I couldn't delete that task: {msg}"
+                    success, msg = delete_task(user_id, task["id"])
+                    if success:
+                        response = f"✅ I've deleted '{task['description']}' from your todo list."
+                    else:
+                        response = f"I'm sorry, I couldn't delete that task: {msg}"
         
         else:
-            response = "I'm not sure I understood that. I can help you:\n- Add tasks (e.g., 'add task to buy groceries')\n- List your tasks (e.g., 'show my tasks')\n- Complete tasks (e.g., 'mark grocery task as done')\n- Delete tasks (e.g., 'delete grocery task')\n\nWhat would you like to do?"
+            # Unknown intent - provide helpful suggestions
+            tasks = get_user_tasks(user_id)
+            response = "I'm not sure I understood that. I can help you with:\n\n"
+            response += "**📝 Add tasks:**\n"
+            response += "- 'Add task to buy groceries'\n"
+            response += "- 'Create a task for meeting'\n"
+            response += "- 'Remind me to call mom'\n\n"
+            response += "**📋 List tasks:**\n"
+            response += "- 'Show my tasks'\n"
+            response += "- 'What are my todos'\n\n"
+            response += "**✅ Complete tasks:**\n"
+            response += "- 'Mark grocery task as done'\n"
+            response += "- 'Complete task 1'\n\n"
+            response += "**✏️ Update tasks:**\n"
+            response += "- 'Change grocery task to buy organic groceries'\n\n"
+            response += "**🗑️ Delete tasks:**\n"
+            response += "- 'Delete grocery task'\n\n"
+            if tasks:
+                response += f"You currently have {len(tasks)} task(s). What would you like to do?"
+            else:
+                response += "You don't have any tasks yet. Would you like to add one?"
     
     except Exception as e:
-        response = "I'm sorry, I encountered an error processing your request. Please try again."
+        # Show actual error for debugging (in development)
+        import traceback
+        error_details = str(e)
+        error_trace = traceback.format_exc()
+        
+        # Log error details (in production, you might want to log this instead)
+        response = f"I'm sorry, I encountered an error processing your request.\n\n"
+        response += f"Error: {error_details}\n\n"
+        response += "Please try rephrasing your request or contact support if the issue persists."
+        
+        # For debugging - you can remove this in production
+        # response += f"\n\nDebug info:\n{error_trace}"
     
     # Store AI response
     store_message(user_id, "assistant", response)
