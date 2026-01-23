@@ -939,31 +939,45 @@ if st.session_state.logged_in and st.session_state.user_id:
                 st.markdown("**Or use voice:**")
                 
                 # Initialize voice input state
-                if "voice_input_text" not in st.session_state:
-                    st.session_state.voice_input_text = None
-                if "voice_input_processed" not in st.session_state:
-                    st.session_state.voice_input_processed = False
+                if "voice_text_result" not in st.session_state:
+                    st.session_state.voice_text_result = ""
+                
+                # Voice input text field (will be filled by JavaScript)
+                voice_text_input = st.text_input(
+                    "Voice input will appear here",
+                    value=st.session_state.voice_text_result,
+                    key="voice_text_input",
+                    placeholder="Click voice button and speak..."
+                )
                 
                 # Process voice input if available
-                if st.session_state.voice_input_text and not st.session_state.voice_input_processed:
-                    voice_text = st.session_state.voice_input_text
-                    st.success(f"🎤 Heard: *{voice_text}*")
-                    try:
-                        with st.spinner("🤔 Processing your voice command..."):
-                            response = process_chat_message(st.session_state.user_id, voice_text)
-                        st.session_state.voice_input_processed = True
-                        st.session_state.voice_input_text = None
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"❌ Error processing voice input: {str(e)}")
-                        import traceback
-                        with st.expander("🔍 Error details (click to expand)"):
-                            st.code(traceback.format_exc())
-                        st.session_state.voice_input_processed = True
-                        st.session_state.voice_input_text = None
-                        st.rerun()
+                if st.session_state.voice_text_result and st.session_state.voice_text_result.strip():
+                    voice_text = st.session_state.voice_text_result.strip()
+                    if voice_text:
+                        # Display in chat immediately
+                        with st.chat_message("user"):
+                            st.write(voice_text)
+                        
+                        try:
+                            with st.spinner("🤔 Processing your voice command..."):
+                                response = process_chat_message(st.session_state.user_id, voice_text)
+                            
+                            # Display response
+                            with st.chat_message("assistant"):
+                                st.markdown(response)
+                            
+                            # Clear voice input
+                            st.session_state.voice_text_result = ""
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Error processing voice input: {str(e)}")
+                            import traceback
+                            with st.expander("🔍 Error details (click to expand)"):
+                                st.code(traceback.format_exc())
+                            st.session_state.voice_text_result = ""
+                            st.rerun()
                 
-                # Create HTML/JS component for voice input (simplified)
+                # Create HTML/JS component for voice input
                 voice_html = """
                 <div style="margin: 10px 0;">
                     <button id="voiceBtn" onclick="startVoiceRecognition()" 
@@ -1020,14 +1034,32 @@ if st.session_state.logged_in and st.session_state.user_id:
                             const transcript = event.results[0][0].transcript.trim();
                             status.innerHTML = '<span style="color: green;">✅ Heard: ' + transcript + '</span>';
                             
-                            // Trigger Streamlit rerun via URL parameter
+                            // Fill the text input field
                             try {
+                                // Find the voice text input field
+                                const inputs = window.parent.document.querySelectorAll('input[data-testid*="text_input"], input[placeholder*="Voice input"]');
+                                if (inputs.length > 0) {
+                                    const voiceInput = inputs[inputs.length - 1];
+                                    voiceInput.value = transcript;
+                                    voiceInput.dispatchEvent(new Event('input', { bubbles: true }));
+                                    voiceInput.dispatchEvent(new Event('change', { bubbles: true }));
+                                    
+                                    // Trigger Streamlit update via URL parameter
+                                    const currentUrl = window.location.href.split('?')[0];
+                                    const newUrl = currentUrl + '?voice_input=' + encodeURIComponent(transcript) + '&_voice_timestamp=' + Date.now();
+                                    window.parent.location.href = newUrl;
+                                } else {
+                                    // Fallback: use URL parameter
+                                    const currentUrl = window.location.href.split('?')[0];
+                                    const newUrl = currentUrl + '?voice_input=' + encodeURIComponent(transcript) + '&_voice_timestamp=' + Date.now();
+                                    window.parent.location.href = newUrl;
+                                }
+                            } catch (e) {
+                                console.error('Error setting voice input:', e);
+                                // Fallback: use URL parameter
                                 const currentUrl = window.location.href.split('?')[0];
                                 const newUrl = currentUrl + '?voice_input=' + encodeURIComponent(transcript) + '&_voice_timestamp=' + Date.now();
-                                window.location.href = newUrl;
-                            } catch (e) {
-                                console.error('Error sending voice input:', e);
-                                status.innerHTML += '<br><span style="color: orange;">⚠️ Processing... Please wait.</span>';
+                                window.parent.location.href = newUrl;
                             }
                         };
                         
@@ -1053,30 +1085,20 @@ if st.session_state.logged_in and st.session_state.user_id:
                 </script>
                 """
                 
-                # Use components.v1.html (key parameter not supported)
-                voice_component = st.components.v1.html(voice_html, height=150)
+                # Use components.v1.html
+                st.components.v1.html(voice_html, height=150)
                 
-                # Check for voice input from URL parameters (fallback method)
+                # Check for voice input from URL parameters
                 query_params = st.query_params
                 if "voice_input" in query_params:
                     voice_text = query_params.get("voice_input", "").strip()
-                    if voice_text and voice_text != st.session_state.get("last_voice_input", ""):
-                        st.session_state.voice_input_text = voice_text
-                        st.session_state.voice_input_processed = False
-                        st.session_state.last_voice_input = voice_text
+                    if voice_text:
+                        # Set the voice text result
+                        st.session_state.voice_text_result = voice_text
                         # Clear the parameter
                         new_params = {k: v for k, v in query_params.items() if k != "voice_input" and k != "_voice_timestamp"}
                         st.query_params = new_params
                         st.rerun()
-                
-                # Debug info (can be removed in production)
-                if st.checkbox("🔍 Show voice input debug info", key="voice_debug"):
-                    st.write("Voice input state:", {
-                        "voice_input_text": st.session_state.get("voice_input_text"),
-                        "voice_input_processed": st.session_state.get("voice_input_processed"),
-                        "last_voice_input": st.session_state.get("last_voice_input"),
-                        "query_params": dict(query_params)
-                    })
         
         st.markdown("---")
         
