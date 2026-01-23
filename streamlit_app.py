@@ -922,8 +922,8 @@ if st.session_state.logged_in and st.session_state.user_id:
                         st.session_state.voice_input_processed = True
                         st.session_state.voice_input_text = None
                 
-                # Create HTML/JS component for voice input with better integration
-                voice_html = f"""
+                # Create HTML/JS component for voice input (simplified)
+                voice_html = """
                 <div style="margin: 10px 0;">
                     <button id="voiceBtn" onclick="startVoiceRecognition()" 
                             style="background-color: #e74c3c; color: white; border: none; 
@@ -935,94 +935,80 @@ if st.session_state.logged_in and st.session_state.user_id:
                 </div>
                 
                 <script>
-                let recognition = null;
-                let isRecording = false;
-                
-                function startVoiceRecognition() {{
-                    const btn = document.getElementById('voiceBtn');
-                    const status = document.getElementById('voiceStatus');
+                (function() {
+                    let recognition = null;
+                    let isRecording = false;
                     
-                    if (isRecording) {{
-                        if (recognition) {{
-                            recognition.stop();
-                        }}
-                        isRecording = false;
-                        btn.textContent = '🎤 Click to Record Voice';
-                        btn.style.backgroundColor = '#e74c3c';
-                        status.innerHTML = '<span style="color: orange;">⏹️ Stopped recording</span>';
-                        return;
-                    }}
-                    
-                    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {{
-                        status.innerHTML = '<span style="color: red;">❌ Speech recognition not supported. Please use Chrome, Edge, or Safari.</span>';
-                        return;
-                    }}
-                    
-                    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-                    recognition = new SpeechRecognition();
-                    recognition.continuous = false;
-                    recognition.interimResults = false;
-                    recognition.lang = 'en-US';
-                    
-                    isRecording = true;
-                    btn.textContent = '🎤 Listening... (Click to stop)';
-                    btn.style.backgroundColor = '#27ae60';
-                    status.innerHTML = '<span style="color: green;">🎤 Listening... Speak now!</span>';
-                    
-                    recognition.onresult = function(event) {{
-                        const transcript = event.results[0][0].transcript.trim();
-                        status.innerHTML = '<span style="color: green;">✅ Heard: ' + transcript + '</span>';
+                    window.startVoiceRecognition = function() {
+                        const btn = document.getElementById('voiceBtn');
+                        const status = document.getElementById('voiceStatus');
                         
-                        // Send to Streamlit using parent.postMessage
-                        if (window.parent && window.parent.postMessage) {{
-                            window.parent.postMessage({{
-                                type: 'streamlit:setComponentValue',
-                                value: transcript
-                            }}, '*');
-                        }}
+                        if (!btn || !status) {
+                            console.error('Voice button or status element not found');
+                            return;
+                        }
                         
-                        // Also try using Streamlit's component communication
-                        try {{
-                            // Use Streamlit's component communication
-                            const streamlitDoc = window.parent.document || window.document;
-                            const streamlitWindow = window.parent || window;
+                        if (isRecording) {
+                            if (recognition) {
+                                recognition.stop();
+                            }
+                            isRecording = false;
+                            btn.textContent = '🎤 Click to Record Voice';
+                            btn.style.backgroundColor = '#e74c3c';
+                            status.innerHTML = '<span style="color: orange;">⏹️ Stopped recording</span>';
+                            return;
+                        }
+                        
+                        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                            status.innerHTML = '<span style="color: red;">❌ Speech recognition not supported. Please use Chrome, Edge, or Safari.</span>';
+                            return;
+                        }
+                        
+                        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                        recognition = new SpeechRecognition();
+                        recognition.continuous = false;
+                        recognition.interimResults = false;
+                        recognition.lang = 'en-US';
+                        
+                        isRecording = true;
+                        btn.textContent = '🎤 Listening... (Click to stop)';
+                        btn.style.backgroundColor = '#27ae60';
+                        status.innerHTML = '<span style="color: green;">🎤 Listening... Speak now!</span>';
+                        
+                        recognition.onresult = function(event) {
+                            const transcript = event.results[0][0].transcript.trim();
+                            status.innerHTML = '<span style="color: green;">✅ Heard: ' + transcript + '</span>';
                             
-                            // Create a hidden input and trigger Streamlit
-                            const input = document.createElement('input');
-                            input.type = 'hidden';
-                            input.id = 'voiceInputValue';
-                            input.value = transcript;
-                            document.body.appendChild(input);
-                            
-                            // Trigger Streamlit rerun via URL parameter as fallback
-                            const currentUrl = window.location.href.split('?')[0];
-                            const newUrl = currentUrl + '?voice_input=' + encodeURIComponent(transcript) + '&_voice_timestamp=' + Date.now();
-                            window.location.href = newUrl;
-                        }} catch (e) {{
-                            console.error('Error sending voice input:', e);
-                            // Fallback: show message to user
-                            status.innerHTML += '<br><span style="color: orange;">⚠️ Processing... Please wait.</span>';
-                        }}
-                    }};
-                    
-                    recognition.onerror = function(event) {{
-                        status.innerHTML = '<span style="color: red;">❌ Error: ' + event.error + '</span>';
-                        btn.textContent = '🎤 Click to Record Voice';
-                        btn.style.backgroundColor = '#e74c3c';
-                        isRecording = false;
-                    }};
-                    
-                    recognition.onend = function() {{
-                        btn.textContent = '🎤 Click to Record Voice';
-                        btn.style.backgroundColor = '#e74c3c';
-                        isRecording = false;
-                        if (!status.innerHTML.includes('Heard:')) {{
-                            status.innerHTML = '<span style="color: orange;">⚠️ Recognition ended. Please try again.</span>';
-                        }}
-                    }};
-                    
-                    recognition.start();
-                }}
+                            // Trigger Streamlit rerun via URL parameter
+                            try {
+                                const currentUrl = window.location.href.split('?')[0];
+                                const newUrl = currentUrl + '?voice_input=' + encodeURIComponent(transcript) + '&_voice_timestamp=' + Date.now();
+                                window.location.href = newUrl;
+                            } catch (e) {
+                                console.error('Error sending voice input:', e);
+                                status.innerHTML += '<br><span style="color: orange;">⚠️ Processing... Please wait.</span>';
+                            }
+                        };
+                        
+                        recognition.onerror = function(event) {
+                            status.innerHTML = '<span style="color: red;">❌ Error: ' + event.error + '</span>';
+                            btn.textContent = '🎤 Click to Record Voice';
+                            btn.style.backgroundColor = '#e74c3c';
+                            isRecording = false;
+                        };
+                        
+                        recognition.onend = function() {
+                            btn.textContent = '🎤 Click to Record Voice';
+                            btn.style.backgroundColor = '#e74c3c';
+                            isRecording = false;
+                            if (!status.innerHTML.includes('Heard:')) {
+                                status.innerHTML = '<span style="color: orange;">⚠️ Recognition ended. Please try again.</span>';
+                            }
+                        };
+                        
+                        recognition.start();
+                    };
+                })();
                 </script>
                 """
                 
