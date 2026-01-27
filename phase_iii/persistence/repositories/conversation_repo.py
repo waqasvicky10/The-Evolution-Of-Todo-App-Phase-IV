@@ -25,7 +25,11 @@ from phase_iii.persistence.models.conversation import (
 
 
 # Database path (shared with Phase II Streamlit app)
-DATABASE_PATH = "todo.db"
+import os
+if os.environ.get("VERCEL"):
+    DATABASE_PATH = "/tmp/todo.db"
+else:
+    DATABASE_PATH = "todo.db"
 
 
 def _get_connection() -> sqlite3.Connection:
