@@ -39,7 +39,7 @@ const apiClient: AxiosInstance = axios.create({
   headers: {
     "Content-Type": "application/json",
   },
-  timeout: 10000, // 10 second timeout
+  timeout: 30000, // 30 second timeout (increased for slow database connections)
 });
 
 
@@ -82,6 +82,17 @@ export function getAuthToken(): string | null {
 export function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
     const axiosError = error as AxiosError<{ detail: string | Array<{ msg: string; loc: string[] }> }>;
+    
+    // Handle timeout errors specifically
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      return "Request timed out. The server may be slow. Please try again.";
+    }
+    
+    // Handle network errors
+    if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
+      return "Cannot connect to server. Please check if the backend is running.";
+    }
+    
     const detail = axiosError.response?.data?.detail;
 
     if (detail) {
@@ -112,11 +123,20 @@ export function getErrorMessage(error: unknown): string {
  *
  * @param data - Registration request data
  * @returns Created user data
- * @throws APIError on validation or conflict errors
+ * @throws APIError on validation or conflict errors or timeout
  */
 export async function register(data: RegisterRequest): Promise<User> {
-  const response = await apiClient.post<User>("/api/auth/register", data);
-  return response.data;
+  try {
+    const response = await apiClient.post<User>("/api/auth/register", data, {
+      timeout: 30000, // 30 seconds for registration (database query may be slow)
+    });
+    return response.data;
+  } catch (error: any) {
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      throw new Error("Request timed out. The server may be slow. Please try again.");
+    }
+    throw error;
+  }
 }
 
 /**
@@ -124,11 +144,20 @@ export async function register(data: RegisterRequest): Promise<User> {
  *
  * @param data - Login credentials
  * @returns Access and refresh tokens
- * @throws APIError on invalid credentials
+ * @throws APIError on invalid credentials or timeout
  */
 export async function login(data: LoginRequest): Promise<TokenResponse> {
-  const response = await apiClient.post<TokenResponse>("/api/auth/login", data);
-  return response.data;
+  try {
+    const response = await apiClient.post<TokenResponse>("/api/auth/login", data, {
+      timeout: 30000, // 30 seconds for login (database query may be slow)
+    });
+    return response.data;
+  } catch (error: any) {
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      throw new Error("Request timed out. The server may be slow. Please try again.");
+    }
+    throw error;
+  }
 }
 
 /**

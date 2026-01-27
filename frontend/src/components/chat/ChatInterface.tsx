@@ -36,12 +36,16 @@ export default function ChatInterface() {
 
             try {
                 const response = await axios.get(`${API_BASE_URL}/chat/history`, {
-                    headers: { Authorization: `Bearer ${accessToken}` }
+                    headers: { Authorization: `Bearer ${accessToken}` },
+                    timeout: 30000  // 30 second timeout
                 });
                 setMessages(response.data.messages || []);
-            } catch (err) {
-                console.error("Failed to load chat history:", err);
-                setError("Failed to load conversation history.");
+            } catch (err: any) {
+                // Silently fail - history is optional, 404 is OK for now
+                if (err.response?.status !== 404) {
+                    console.error("Failed to load chat history:", err);
+                }
+                // Don't show error for missing history endpoint
             }
         };
 

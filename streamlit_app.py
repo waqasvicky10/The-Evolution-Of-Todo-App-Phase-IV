@@ -934,185 +934,242 @@ if st.session_state.logged_in and st.session_state.user_id:
                     st.rerun()
         
         with col2:
-            # Simplified voice input - show transcribed text clearly
+            # Voice input - ULTRA SIMPLE APPROACH
+            # Shows transcript directly in HTML, user copies and pastes
             if VOICE_INPUT_AVAILABLE:
                 st.markdown("**Or use voice:**")
                 
-                # Check for voice input from URL parameters
-                query_params = st.query_params
-                voice_text_from_url = None
-                if "voice_input" in query_params:
-                    voice_text_from_url = query_params.get("voice_input", "").strip()
-                    # Debug: show what we got
-                    if voice_text_from_url:
-                        st.session_state.voice_text_result = voice_text_from_url
-                        st.session_state.last_voice_input = voice_text_from_url
-                        # Clear URL param and rerun to show it
-                        new_params = {k: v for k, v in query_params.items() if k != "voice_input" and k != "_voice_timestamp"}
-                        st.query_params = new_params
-                        st.rerun()
+                # Important notice about console warnings
+                with st.expander("ℹ️ About Console Warnings (Click to read)", expanded=False):
+                    st.info("""
+                    **Those console warnings are NORMAL and HARMLESS!**
+                    
+                    The warnings you see (like "Unrecognized feature: 'ambient-light-sensor'") are from Streamlit's 
+                    own JavaScript framework, NOT from the voice input code. They are informational warnings about 
+                    browser features and do NOT affect functionality.
+                    
+                    **Your voice input will work fine despite these warnings.**
+                    
+                    If voice input isn't working, it's NOT because of these warnings. Check:
+                    1. Are you using Chrome, Edge, or Safari? (Speech recognition requires these browsers)
+                    2. Did you allow microphone permissions?
+                    3. Is the "Listening..." message appearing when you click the button?
+                    """)
                 
-                # Show voice input result if available
-                if st.session_state.get("voice_text_result"):
-                    st.markdown("---")
-                    st.markdown("### 🎤 Voice Input Result")
-                    
-                    # Display in a prominent box
-                    voice_text = st.session_state.voice_text_result
-                    st.success(f"**✅ Heard:** {voice_text}")
-                    
-                    # Buttons to use or clear
-                    col_use, col_clear = st.columns([2, 1])
-                    with col_use:
-                        if st.button("✅ Use This Voice Input", key="use_voice_input", use_container_width=True, type="primary"):
-                            # Process directly
-                            # Display in chat
-                            with st.chat_message("user"):
-                                st.write(voice_text)
-                            
-                            try:
-                                with st.spinner("🤔 Processing your voice command..."):
-                                    response = process_chat_message(st.session_state.user_id, voice_text)
-                                
-                                # Display response
-                                with st.chat_message("assistant"):
-                                    st.markdown(response)
-                                
-                                # Clear voice input
-                                st.session_state.voice_text_result = ""
-                                st.session_state.last_voice_input = ""
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"❌ Error: {str(e)}")
-                                import traceback
-                                with st.expander("🔍 Error details"):
-                                    st.code(traceback.format_exc())
-                    
-                    with col_clear:
-                        if st.button("🗑️ Clear", key="clear_voice_result", use_container_width=True):
-                            st.session_state.voice_text_result = ""
-                            st.session_state.last_voice_input = ""
-                            st.rerun()
-                    
-                    st.markdown("---")
-                else:
-                    st.info("💡 Click the voice button below, speak your command, and the transcribed text will appear here.")
-                
-                # Simple voice recorder component
-                voice_html = """
-                <div style="margin: 10px 0;">
-                    <button id="voiceBtn" onclick="startVoiceRecognition()" 
+                # Ultra-simple voice component - transcript shown IN the component itself
+                voice_component = """
+                <div style="margin: 10px 0; padding: 15px; border: 2px solid #e0e0e0; border-radius: 8px; background: #fafafa;">
+                    <button id="voiceBtn" onclick="startRecording()" 
                             style="background-color: #e74c3c; color: white; border: none; 
-                                   padding: 12px 24px; border-radius: 5px; cursor: pointer;
-                                   font-size: 16px; width: 100%; font-weight: bold;">
+                                   padding: 15px 25px; border-radius: 5px; cursor: pointer;
+                                   font-size: 18px; width: 100%; font-weight: bold; margin-bottom: 15px;">
                         🎤 Click to Record Voice
                     </button>
-                    <div id="voiceStatus" style="margin-top: 10px; color: #666; font-size: 14px; min-height: 40px; padding: 10px; background: #f8f9fa; border-radius: 5px;"></div>
+                    
+                    <div id="status" style="min-height: 40px; padding: 10px; margin-bottom: 15px; border-radius: 5px;"></div>
+                    
+                    <div id="transcriptBox" style="display: none; padding: 20px; background: white; border: 3px solid #28a745; border-radius: 8px; margin-top: 15px;">
+                        <div style="color: #28a745; font-weight: bold; font-size: 18px; margin-bottom: 15px; text-align: center;">
+                            ✅ Voice Captured! Copy the text below:
+                        </div>
+                        <div id="transcriptText" 
+                             style="background: #f8f9fa; padding: 20px; border-radius: 5px; 
+                                    font-size: 20px; font-weight: bold; color: #155724; 
+                                    word-break: break-word; margin-bottom: 15px;
+                                    border: 2px solid #28a745; cursor: text; user-select: all;
+                                    min-height: 60px; line-height: 1.5;">
+                            (Your transcribed text will appear here)
+                        </div>
+                        <button onclick="copyToClipboard()" 
+                                style="background-color: #007bff; color: white; border: none; 
+                                       padding: 12px 24px; border-radius: 5px; cursor: pointer; 
+                                       font-size: 16px; width: 100%; font-weight: bold; margin-bottom: 10px;">
+                            📋 Copy Text to Clipboard
+                        </button>
+                        <div style="text-align: center; color: #666; font-size: 14px; margin-top: 10px;">
+                            👇 Paste the copied text in the input field below
+                        </div>
+                    </div>
                 </div>
                 
                 <script>
-                (function() {
-                    let recognition = null;
-                    let isRecording = false;
+                let recognition = null;
+                let isRecording = false;
+                let currentTranscript = '';
+                
+                function startRecording() {
+                    console.log('[Voice Input] Start recording called');
+                    const btn = document.getElementById('voiceBtn');
+                    const status = document.getElementById('status');
+                    const transcriptBox = document.getElementById('transcriptBox');
+                    const transcriptText = document.getElementById('transcriptText');
                     
-                    window.startVoiceRecognition = function() {
-                        const btn = document.getElementById('voiceBtn');
-                        const status = document.getElementById('voiceStatus');
-                        
-                        if (!btn || !status) return;
-                        
-                        if (isRecording) {
-                            if (recognition) recognition.stop();
-                            isRecording = false;
-                            btn.textContent = '🎤 Click to Record Voice';
-                            btn.style.backgroundColor = '#e74c3c';
-                            return;
-                        }
-                        
-                        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-                            status.innerHTML = '<span style="color: red;">❌ Speech recognition not supported. Please use Chrome, Edge, or Safari.</span>';
-                            return;
-                        }
-                        
+                    if (!btn || !status) {
+                        console.error('[Voice Input] Required elements not found');
+                        return;
+                    }
+                    
+                    if (isRecording) {
+                        console.log('[Voice Input] Stopping recording');
+                        if (recognition) recognition.stop();
+                        isRecording = false;
+                        btn.textContent = '🎤 Click to Record Voice';
+                        btn.style.backgroundColor = '#e74c3c';
+                        status.innerHTML = '';
+                        return;
+                    }
+                    
+                    // Check browser support
+                    const hasWebkit = 'webkitSpeechRecognition' in window;
+                    const hasStandard = 'SpeechRecognition' in window;
+                    console.log('[Voice Input] Browser support check:', { hasWebkit, hasStandard });
+                    
+                    if (!hasWebkit && !hasStandard) {
+                        const errorMsg = '❌ Speech recognition not supported. Please use Chrome, Edge, or Safari.';
+                        status.innerHTML = '<div style="color: red; padding: 10px; background: #f8d7da; border-radius: 5px;">' + errorMsg + '</div>';
+                        console.error('[Voice Input]', errorMsg);
+                        return;
+                    }
+                    
+                    try {
                         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
                         recognition = new SpeechRecognition();
                         recognition.continuous = false;
                         recognition.interimResults = false;
                         recognition.lang = 'en-US';
                         
+                        console.log('[Voice Input] SpeechRecognition initialized');
+                        
                         isRecording = true;
                         btn.textContent = '🎤 Listening... (Click to stop)';
                         btn.style.backgroundColor = '#27ae60';
-                        status.innerHTML = '<span style="color: green; font-weight: bold;">🎤 Listening... Speak now!</span>';
+                        status.innerHTML = '<div style="color: green; font-weight: bold; padding: 15px; background: #d4edda; border-radius: 5px; text-align: center; font-size: 16px;">🎤 Listening... Speak now!</div>';
+                        transcriptBox.style.display = 'none';
+                        
+                        recognition.onstart = function() {
+                            console.log('[Voice Input] Recognition started');
+                        };
                         
                         recognition.onresult = function(event) {
-                            const transcript = event.results[0][0].transcript.trim();
-                            
-                            // Always show the transcript prominently first
-                            status.innerHTML = '<div style="background: #d4edda; padding: 20px; border-radius: 8px; border: 3px solid #28a745; margin-top: 15px;">' +
-                                '<div style="color: green; font-weight: bold; font-size: 18px; margin-bottom: 15px;">✅ Voice Input Captured!</div>' +
-                                '<div style="background: white; padding: 15px; border-radius: 5px; font-size: 18px; font-weight: bold; color: #155724; margin-bottom: 15px; border: 2px solid #28a745; word-break: break-word;">' + transcript + '</div>' +
-                                '<div style="color: #155724; font-weight: bold; margin-bottom: 10px;">🔄 Attempting to process...</div>' +
-                                '</div>';
-                            
-                            // Try URL parameter approach
-                            let urlSuccess = false;
-                            try {
-                                // Get base URL without query params
-                                let baseUrl = window.location.href;
-                                const qIndex = baseUrl.indexOf('?');
-                                if (qIndex > -1) {
-                                    baseUrl = baseUrl.substring(0, qIndex);
-                                }
+                            console.log('[Voice Input] Result received:', event);
+                            if (event.results && event.results.length > 0 && event.results[0].length > 0) {
+                                currentTranscript = event.results[0][0].transcript.trim();
+                                console.log('[Voice Input] Transcript:', currentTranscript);
+                                transcriptText.textContent = currentTranscript;
+                                transcriptBox.style.display = 'block';
+                                status.innerHTML = '<div style="color: green; padding: 10px; background: #d4edda; border-radius: 5px; text-align: center;">✅ Transcription complete!</div>';
+                                btn.textContent = '🎤 Click to Record Voice';
+                                btn.style.backgroundColor = '#e74c3c';
+                                isRecording = false;
                                 
-                                // Add voice input parameter
-                                const separator = baseUrl.includes('?') ? '&' : '?';
-                                const newUrl = baseUrl + separator + 'voice_input=' + encodeURIComponent(transcript) + '&_voice_timestamp=' + Date.now();
-                                
-                                // Try to navigate
-                                setTimeout(function() {
-                                    try {
-                                        window.location.href = newUrl;
-                                        urlSuccess = true;
-                                    } catch (navError) {
-                                        // Navigation failed - show manual copy option
-                                        status.innerHTML += '<div style="background: #fff3cd; padding: 20px; border-radius: 8px; margin-top: 15px; border: 3px solid #ffc107;">' +
-                                            '<div style="color: #856404; font-weight: bold; font-size: 16px; margin-bottom: 15px;">📝 Please copy this text and paste it in the text input above (left column):</div>' +
-                                            '<div style="background: white; padding: 15px; border-radius: 5px; font-size: 18px; font-weight: bold; color: #856404; border: 2px solid #ffc107; word-break: break-word; cursor: text; user-select: all;">' + transcript + '</div>' +
-                                            '<div style="color: #856404; margin-top: 10px; font-size: 14px;">💡 Click the text above to select it, then copy (Ctrl+C) and paste it in the input field.</div>' +
-                                            '</div>';
-                                    }
-                                }, 1000);
-                            } catch (e) {
-                                // Error - show manual copy option
-                                status.innerHTML += '<div style="background: #fff3cd; padding: 20px; border-radius: 8px; margin-top: 15px; border: 3px solid #ffc107;">' +
-                                    '<div style="color: #856404; font-weight: bold; font-size: 16px; margin-bottom: 15px;">📝 Please copy this text and paste it in the text input above (left column):</div>' +
-                                    '<div style="background: white; padding: 15px; border-radius: 5px; font-size: 18px; font-weight: bold; color: #856404; border: 2px solid #ffc107; word-break: break-word; cursor: text; user-select: all;">' + transcript + '</div>' +
-                                    '<div style="color: #856404; margin-top: 10px; font-size: 14px;">💡 Click the text above to select it, then copy (Ctrl+C) and paste it in the input field.</div>' +
-                                    '</div>';
+                                // Auto-scroll to transcript
+                                transcriptBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            } else {
+                                console.warn('[Voice Input] Empty result');
+                                status.innerHTML = '<div style="color: orange; padding: 10px; background: #fff3cd; border-radius: 5px;">⚠️ No speech detected. Please try again.</div>';
                             }
                         };
                         
                         recognition.onerror = function(event) {
-                            status.innerHTML = '<span style="color: red;">❌ Error: ' + event.error + '</span>';
+                            console.error('[Voice Input] Error:', event.error);
+                            let errorMsg = '❌ Error: ' + event.error;
+                            if (event.error === 'no-speech') {
+                                errorMsg = '❌ No speech detected. Please try again and speak clearly.';
+                            } else if (event.error === 'not-allowed') {
+                                errorMsg = '❌ Microphone permission denied. Please allow microphone access and try again.';
+                            }
+                            status.innerHTML = '<div style="color: red; padding: 10px; background: #f8d7da; border-radius: 5px;">' + errorMsg + '</div>';
                             btn.textContent = '🎤 Click to Record Voice';
                             btn.style.backgroundColor = '#e74c3c';
                             isRecording = false;
+                            transcriptBox.style.display = 'none';
                         };
                         
                         recognition.onend = function() {
-                            btn.textContent = '🎤 Click to Record Voice';
-                            btn.style.backgroundColor = '#e74c3c';
+                            console.log('[Voice Input] Recognition ended');
+                            if (!isRecording) {
+                                btn.textContent = '🎤 Click to Record Voice';
+                                btn.style.backgroundColor = '#e74c3c';
+                            }
                             isRecording = false;
                         };
                         
                         recognition.start();
-                    };
-                })();
+                        console.log('[Voice Input] Recognition.start() called');
+                    } catch (error) {
+                        console.error('[Voice Input] Exception:', error);
+                        status.innerHTML = '<div style="color: red; padding: 10px; background: #f8d7da; border-radius: 5px;">❌ Failed to start recognition: ' + error.message + '</div>';
+                        isRecording = false;
+                    }
+                }
+                
+                function copyToClipboard() {
+                    const text = document.getElementById('transcriptText').textContent;
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(text).then(function() {
+                            const btn = event.target;
+                            const originalText = btn.textContent;
+                            btn.textContent = '✅ Copied!';
+                            btn.style.backgroundColor = '#28a745';
+                            setTimeout(function() {
+                                btn.textContent = originalText;
+                                btn.style.backgroundColor = '#007bff';
+                            }, 2000);
+                        }).catch(function(err) {
+                            alert('Failed to copy. Please select and copy the text manually.');
+                        });
+                    } else {
+                        // Fallback: select text
+                        const range = document.createRange();
+                        range.selectNode(document.getElementById('transcriptText'));
+                        window.getSelection().removeAllRanges();
+                        window.getSelection().addRange(range);
+                        try {
+                            document.execCommand('copy');
+                            alert('Text copied to clipboard!');
+                        } catch (err) {
+                            alert('Please select the text above and copy it manually (Ctrl+C or Cmd+C).');
+                        }
+                    }
+                }
                 </script>
                 """
                 
-                st.components.v1.html(voice_html, height=150)
+                st.components.v1.html(voice_component, height=400)
+                
+                # Simple text input for pasting
+                st.markdown("**Paste your transcribed text here:**")
+                voice_text_input = st.text_input(
+                    "Voice Input",
+                    placeholder="Paste the copied text here, then click Send",
+                    key="voice_paste_input",
+                    label_visibility="collapsed"
+                )
+                
+                if voice_text_input and voice_text_input.strip():
+                    if st.button("📤 Send Voice Input", key="send_voice_paste", type="primary", use_container_width=True):
+                        voice_text = voice_text_input.strip()
+                        if voice_text != st.session_state.get("last_voice_input_processed"):
+                            st.session_state.last_voice_input_processed = voice_text
+                            st.session_state.messages.append({"role": "user", "content": voice_text})
+                            with st.chat_message("user"):
+                                st.write(voice_text)
+                            try:
+                                with st.spinner("🤔 Processing your voice command..."):
+                                    response = process_chat_message(st.session_state.user_id, voice_text)
+                                st.session_state.messages.append({"role": "assistant", "content": response})
+                                with st.chat_message("assistant"):
+                                    st.markdown(response)
+                                st.rerun()
+                            except Exception as e:
+                                error_msg = str(e)
+                                st.error(f"❌ Error: {error_msg}")
+                                import traceback
+                                with st.expander("🔍 Error details"):
+                                    st.code(traceback.format_exc())
+                                st.rerun()
+                
+                st.success("💡 **How it works:** 1) Click 🎤 Record Voice, 2) Speak your command, 3) Click 📋 Copy Text, 4) Paste in the field above, 5) Click 📤 Send")
         
         st.markdown("---")
         

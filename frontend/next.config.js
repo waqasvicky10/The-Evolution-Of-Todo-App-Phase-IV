@@ -1,6 +1,68 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Performance optimizations for faster dev server
+  swcMinify: true,
+  
+  // Aggressive optimizations for development
+  experimental: {
+    // Use Turbopack for MUCH faster compilation (Next.js 14+)
+    turbo: {
+      // Optimize package imports
+      resolveAlias: {
+        // Reduce resolution overhead
+      },
+    },
+    // Faster refresh
+    optimizePackageImports: ['axios', '@better-auth/react', 'react', 'react-dom'],
+  },
+  
+  // Disable source maps in development for MUCH faster builds
+  productionBrowserSourceMaps: false,
+  
+  // TypeScript optimizations
+  typescript: {
+    // Skip type checking during build (faster, but less safe)
+    // You can still run type checking separately: npm run type-check
+    ignoreBuildErrors: false, // Keep false for safety, but speeds up if true
+  },
+  
+  // ESLint optimizations
+  eslint: {
+    // Skip ESLint during build for faster compilation
+    ignoreDuringBuilds: true, // Speeds up significantly
+  },
+  
+  // Faster webpack compilation
+  webpack: (config, { dev, isServer }) => {
+    if (dev && !isServer) {
+      // Aggressive dev optimizations
+      config.optimization = {
+        ...config.optimization,
+        removeAvailableModules: false,
+        removeEmptyChunks: false,
+        splitChunks: false,
+        // Disable minification in dev
+        minimize: false,
+      };
+      
+      // Faster file watching
+      config.watchOptions = {
+        poll: false, // Disable polling (faster on Windows)
+        aggregateTimeout: 200, // Reduced timeout
+        ignored: [
+          /node_modules/,
+          /\.next/,
+          /\.git/,
+        ],
+      };
+      
+      // Reduce module resolution overhead
+      config.resolve.symlinks = false;
+      config.resolve.cache = true;
+    }
+    return config;
+  },
 }
 
 module.exports = nextConfig

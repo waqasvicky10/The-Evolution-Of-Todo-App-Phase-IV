@@ -19,6 +19,11 @@ class MockProvider(LLMProvider):
     Mock LLM provider using keyword-based intent recognition.
     
     This is the fallback provider when no API key is available.
+    It now supports:
+    1. Keyword-based intent recognition
+    2. Context awareness (referencing previous tasks)
+    3. Confirmation flows (for delete)
+    4. Urdu language support
     """
     
     def __init__(self):
@@ -33,6 +38,40 @@ class MockProvider(LLMProvider):
         """Normalize Urdu text: trim and remove punctuation."""
         normalized = re.sub(r'[۔؟!،]', ' ', text)
         return normalized.strip()
+
+    def _get_context_from_history(self, history: List[Dict[str, str]]) -> Dict[str, Any]:
+        """
+        Extract context from conversation history.
+        Finds the last mentioned Task ID or details.
+        """
+        context = {"last_id": None, "pending_action": None, "pending_id": None}
+        
+        if not history:
+            return context
+            
+        # Scan backwards
+        for i in range(len(history) - 1, -1, -1):
+            msg = history[i]
+            content = msg.get("content", "").lower()
+            role = msg.get("role")
+            
+            # Check for pending confirmations
+            if role == "assistant":
+                # Check for delete confirmation question
+                confirmation_match = re.search(r"(?:sure|confirm).*delete.*task\s+(\d+)", content)
+                if confirmation_match:
+                    context["pending_action"] = "delete"
+                    context["pending_id"] = int(confirmation_match.group(1))
+                    if not context["last_id"]:
+                        context["last_id"] = context["pending_id"]
+                    break # Found the most recent pending action
+            
+            # Extract ID if mentioning a known task pattern
+            id_match = re.search(r"(?:task|id|item)(?:\s*[:#])?\s+(\d+)", content)
+            if id_match and not context["last_id"]:
+                context["last_id"] = int(id_match.group(1))
+                
+        return context
     
     def process_message(
         self,
@@ -41,13 +80,18 @@ class MockProvider(LLMProvider):
         user_id: int,
         tools: Optional[List[Dict[str, Any]]] = None
     ) -> Dict[str, Any]:
-        """Process a user message using keyword matching."""
+        """Process a user message using keyword matching with context."""
         is_urdu_msg = self.is_urdu(user_message)
         msg = self.normalize_urdu(user_message.lower()) if is_urdu_msg else user_message.lower().strip()
         logger.info(f"Mock processing message: {msg} (Urdu: {is_urdu_msg})")
         
+        # Get context
+        context = self._get_context_from_history(conversation_history or [])
+        last_id = context.get("last_id")
+        
         tool_calls = []
         response_text = ""
+        matched = False
         
         # Ordinal Mapping for Urdu
         urdu_ordinals = {
@@ -58,99 +102,102 @@ class MockProvider(LLMProvider):
             "پانچواں": 5, "پانچویں": 5
         }
         
+        # 1. Handle Confirmation Flows (Priority)
+        if context.get("pending_action") == "delete" and context.get("pending_id"):
+            pending_id = context["pending_id"]
+            
+            # Check for Yes/No with word boundaries to avoid false positives
+            yes_pattern = r"\b(?:yes|sure|confirm|ok|yeah|do it|y)\b|(?:\bجی\b|\bہاں\b|\bبلکل\b)"
+            no_pattern = r"\b(?:no|cancel|stop|don't|wait)\b|(?:\bنہیں\b|\bمت\b|\bرک\b)"
+            
+            if re.search(yes_pattern, msg):
+                resp_text = f"میں ٹاسک {pending_id} کو حذف کر رہا ہوں۔" if is_urdu_msg else f"I'm deleting task {pending_id} for you."
+                return {
+                    "response_text": resp_text,
+                    "tool_calls": [{
+                        "name": "delete_todo", 
+                        "input": {"user_id": user_id, "todo_id": pending_id},
+                        "tool_use_id": f"mock_delete_confirm_{user_id}_{pending_id}"
+                    }],
+                    "requires_tool_execution": True,
+                    "stop_reason": "end_turn",
+                    "language": "ur" if is_urdu_msg else "en"
+                }
+            elif re.search(no_pattern, msg):
+                resp_text = "حذف کرنے کا عمل منسوخ کر دیا گیا ہے۔" if is_urdu_msg else "Deletion cancelled."
+                return {
+                    "response_text": resp_text,
+                    "tool_calls": [],
+                    "requires_tool_execution": False,
+                    "stop_reason": "end_turn",
+                    "language": "ur" if is_urdu_msg else "en"
+                }
+        
+        # 2. Define Rules
         if is_urdu_msg:
             rules = [
                 ("list", r"(فہرست|لسٹ|دکھا|دیکھ|بتا|کیا ہے|کیا ہیں|میرے کام|ٹاسک|لسٹ)", 
-                 lambda m: ("آپ کی ٹو ڈو فہرست حاصل کی جا رہی ہے...", [])),
+                 lambda m, ctx: ("آپ کی ٹو ڈو فہرست حاصل کی جا رہی ہے...", [])),
                 ("add", r"(.*?)\s*(شامل کریں|شامل کرو|لکھیں|ایڈ کریں|ڈالیں|ڈالو|اضافہ کرو|کریں|بنائیں)", 
-                 lambda m: (f"جی بالکل! میں '{m.group(1).strip()}' کو آپ کی فہرست میں شامل کر رہا ہوں۔", 
+                 lambda m, ctx: (f"جی بالکل! میں '{m.group(1).strip()}' کو آپ کی فہرست میں شامل کر رہا ہوں۔", 
                             [{"name": "create_todo", "input": {"user_id": user_id, "title": m.group(1).strip()}}])),
+                            
+                # Context-aware updates/deletes in Urdu 
+                # (Simplified for Hackathon - assumes explicit IDs mostly, but could support 'it' if Urdu grammar supported here)
+                
                 ("complete", r"(ٹاسک|کام|نمبر)?\s*(\d+|پہلا|دوسرا|تیسرا|چوتھا|پانچواں)\s*(ٹاسک|کام|نمبر)?\s*(مکمل|ختم|ہو گیا|ڈن|کریں|کردیں|کرو)", 
-                 lambda m: (f"ٹاسک {m.group(2)} کو مکمل نشان زد کیا جا رہا ہے۔", 
+                 lambda m, ctx: (f"ٹاسک {m.group(2)} کو مکمل نشان زد کیا جا رہا ہے۔", 
                             [{"name": "update_todo", "input": {"user_id": user_id, "todo_id": urdu_ordinals.get(m.group(2), int(m.group(2)) if m.group(2).isdigit() else 1), "completed": True}}])),
-                ("delete", r"(ٹاسک|کام|نمبر)?\s*(\d+|پہلا|دوسرا|تیسرا|چوتھا|پانچواں)\s*(ٹاسک|کام|نمبر)?\s*(حذف|نکال|مٹائیں|ختم کریں|کرو|کریں|ڈیلیٹ)", 
-                 lambda m: (f"میں آپ کے لیے ٹاسک {m.group(2)} حذف کر رہا ہوں۔", 
-                            [{"name": "delete_todo", "input": {"user_id": user_id, "todo_id": urdu_ordinals.get(m.group(2), int(m.group(2)) if m.group(2).isdigit() else 1)}}])),
+                            
+                ("delete_request", r"(ٹاسک|کام|نمبر)?\s*(\d+|پہلا|دوسرا|تیسرا|چوتھا|پانچواں)\s*(ٹاسک|کام|نمبر)?\s*(حذف|نکال|مٹائیں|ختم کریں|کرو|کریں|ڈیلیٹ)", 
+                 lambda m, ctx: (f"کیا آپ واقعی ٹاسک {m.group(2)} کو حذف کرنا چاہتے ہیں؟ (Are you sure you want to delete task {m.group(2)}?)", [])), 
+                 # Note: Returns text asking for confirmation, NOT tool call.
+                 
                 ("update", r"(ٹاسک|کام|نمبر)?\s*(\d+|پہلا|دوسرا|تیسرا|چوتھا|پانچواں)\s*(ٹاسک|کام|نمبر)?\s*(کا نام بدل کر|کو بدل کر|کو|بدلو|اپڈیٹ کرو|اپڈیٹ)\s*['\"]?(.*?)['\"]?\s*(کر دیں|تبدیل کریں|بنا دیں|کرو|کریں)", 
-                 lambda m: (f"ٹاسک {m.group(2)} کو '{m.group(5).strip()}' میں تبدیل کیا جا رہا ہے۔", 
+                 lambda m, ctx: (f"ٹاسک {m.group(2)} کو '{m.group(5).strip()}' میں تبدیل کیا جا رہا ہے۔", 
                             [{"name": "update_todo", "input": {"user_id": user_id, "todo_id": urdu_ordinals.get(m.group(2), int(m.group(2)) if m.group(2).isdigit() else 1), "title": m.group(5).strip()}}])),
             ]
         else:
+            # English Rules
             rules = [
                 ("list", r"(show|list|get|fetch|what are|display).*(task|todo|list|items)", 
-                 lambda m: ("Fetching your todo list...", [])),
-                ("add", r"(?:add|create|new task|remember to|remind me to)\s+(?:a task to|a task|to|task)?\s*(.+)", 
-                 lambda m: (f"Sure! I'll add '{m.group(1).strip().capitalize()}' to your list.", 
+                 lambda m, ctx: ("Fetching your todo list...", [])),
+                 
+                ("add", r"(?:add|create|new task|remember to|remind me to)\s+(?:a task to|a task|to|task|that)?\s*(.+)", 
+                 lambda m, ctx: (f"Sure! I'll add '{m.group(1).strip().capitalize()}' to your list.", 
                             [{"name": "create_todo", "input": {"user_id": user_id, "title": m.group(1).strip().capitalize()}}])),
-                # Handle "ID 24 marked as completed task" format (most specific - must come first)
-                ("complete", r"id\s+(\d+)\s+marked\s+as\s+(?:completed|complete|done|finished)\s+task", 
-                 lambda m: (f"Marking task {m.group(1)} as complete.", 
+                
+                # Context-aware reference ("it", "that", "this")
+                ("complete_context", r"(?:complete|finish|mark|check off)\s+(?:it|that|this|the task)$",
+                 lambda m, ctx: (f"Marking task {ctx} as complete.", 
+                            [{"name": "update_todo", "input": {"user_id": user_id, "todo_id": ctx, "completed": True}}]) if ctx else ("Which task would you like to complete?", [])),
+                            
+                ("delete_context", r"(?:delete|remove|erase)\s+(?:it|that|this|the task)$",
+                 lambda m, ctx: (f"Are you sure you want to delete task {ctx}? This cannot be undone.", []) if ctx else ("Which task would you like to delete?", [])),
+
+                # Explicit ID commands (merged and simplified regexes)
+                ("complete", r"(?:complete|mark|finish)\s+(?:task|id)?\s*(\d+)", 
+                 lambda m, ctx: (f"Marking task {m.group(1)} as complete.", 
                             [{"name": "update_todo", "input": {"user_id": user_id, "todo_id": int(m.group(1)), "completed": True}}])),
-                # Handle "ID 24 marked as completed" format (without "task" at end)
-                ("complete", r"id\s+(\d+)\s+marked\s+as\s+(?:completed|complete|done|finished)", 
-                 lambda m: (f"Marking task {m.group(1)} as complete.", 
-                            [{"name": "update_todo", "input": {"user_id": user_id, "todo_id": int(m.group(1)), "completed": True}}])),
-                # Handle "ID 6 task completed" format
-                ("complete", r"id\s+(\d+)\s+task\s+(?:is\s+)?(?:done|complete|completed|finished|ready)", 
-                 lambda m: (f"Marking task {m.group(1)} as complete.", 
-                            [{"name": "update_todo", "input": {"user_id": user_id, "todo_id": int(m.group(1)), "completed": True}}])),
-                # Handle "ID 24 marked as completed" format
-                ("complete", r"id\s+(\d+)\s+marked\s+as\s+(?:completed|complete|done|finished)", 
-                 lambda m: (f"Marking task {m.group(1)} as complete.", 
-                            [{"name": "update_todo", "input": {"user_id": user_id, "todo_id": int(m.group(1)), "completed": True}}])),
-                # Handle "task 6 completed" format
-                ("complete", r"task\s+(\d+)\s+(?:is\s+)?(?:done|complete|completed|finished|ready)", 
-                 lambda m: (f"Marking task {m.group(1)} as complete.", 
-                            [{"name": "update_todo", "input": {"user_id": user_id, "todo_id": int(m.group(1)), "completed": True}}])),
-                # Handle "task 6 done" format
-                ("complete", r"task\s+(\d+)\s+done", 
-                 lambda m: (f"Marking task {m.group(1)} as complete.", 
-                            [{"name": "update_todo", "input": {"user_id": user_id, "todo_id": int(m.group(1)), "completed": True}}])),
-                # Handle "complete task 6" format
-                ("complete", r"(?:complete|mark|set|finish)\s+task\s+(\d+)", 
-                 lambda m: (f"Marking task {m.group(1)} as complete.", 
-                            [{"name": "update_todo", "input": {"user_id": user_id, "todo_id": int(m.group(1)), "completed": True}}])),
-                # Handle "ID 6 completed" format
-                ("complete", r"id\s+(\d+)\s+(?:is\s+)?(?:done|complete|completed|finished|ready)", 
-                 lambda m: (f"Marking task {m.group(1)} as complete.", 
-                            [{"name": "update_todo", "input": {"user_id": user_id, "todo_id": int(m.group(1)), "completed": True}}])),
-                # Handle "6 completed" format (standalone number)
-                ("complete", r"^(\d+)\s+(?:is\s+)?(?:done|complete|completed|finished|ready)$", 
-                 lambda m: (f"Marking task {m.group(1)} as complete.", 
-                            [{"name": "update_todo", "input": {"user_id": user_id, "todo_id": int(m.group(1)), "completed": True}}])),
-                # Handle "(mark|set|mark task|complete|completed|finish|finished|done)\s+(?:task|todo|id)?\s*(\d+)\s*(?:as\s+)?(?:done|complete|completed|finished|ready)?" format
-                ("complete", r"(?:mark|set|mark task|complete|completed|finish|finished|done)\s+(?:task|todo|id)?\s*(\d+)\s*(?:as\s+)?(?:done|complete|completed|finished|ready)?", 
-                 lambda m: (f"Marking task {m.group(1)} as complete.", 
-                            [{"name": "update_todo", "input": {"user_id": user_id, "todo_id": int(m.group(1)), "completed": True}}])),
-                # Handle "(task|todo|id|number)?\s*(\d+)\s*(?:is\s+)?(?:done|complete|completed|finished|ready)" format (most general)
-                ("complete", r"(?:task|todo|id|number)?\s*(\d+)\s*(?:is\s+)?(?:done|complete|completed|finished|ready)", 
-                 lambda m: (f"Marking task {m.group(1)} as complete.", 
-                            [{"name": "update_todo", "input": {"user_id": user_id, "todo_id": int(m.group(1)), "completed": True}}])),
-                # Handle "ID 24 delete tasks" format (most specific - must come first)
-                ("delete", r"id\s+(\d+)\s+(?:delete|deleted|remove|removed|clear|erase|drop)\s+(?:task|tasks|todo|todos)", 
-                 lambda m: (f"I'm deleting task {m.group(1)} for you.", 
-                            [{"name": "delete_todo", "input": {"user_id": user_id, "todo_id": int(m.group(1))}}])),
-                # Handle "ID 24 delete" format
-                ("delete", r"id\s+(\d+)\s+(?:delete|deleted|remove|removed|clear|erase|drop)", 
-                 lambda m: (f"I'm deleting task {m.group(1)} for you.", 
-                            [{"name": "delete_todo", "input": {"user_id": user_id, "todo_id": int(m.group(1))}}])),
-                # Handle "delete task 24" format
-                ("delete", r"(?:delete|deleted|remove|removed|clear|erase|drop)\s+(?:task|todo|id)?\s*(\d+)", 
-                 lambda m: (f"I'm deleting task {m.group(1)} for you.", 
-                            [{"name": "delete_todo", "input": {"user_id": user_id, "todo_id": int(m.group(1))}}])),
-                ("update", r"(?:update|change|changed|edit|rename)\s+(?:task|todo|id)?\s*(\d+)\s+(?:to|with)\s+['\"]?(.*?)['\"]?$", 
-                 lambda m: (f"Updating task {m.group(1)} to '{m.group(2).strip()}'." , 
+                            
+                ("delete_request", r"(?:delete|remove)\s+(?:task|id)?\s*(\d+)", 
+                 lambda m, ctx: (f"Are you sure you want to delete task {m.group(1)}? This cannot be undone.", [])),
+                 
+                ("update", r"(?:update|change|rename)\s+(?:task|id)?\s*(\d+)\s+(?:to|with)\s+['\"]?(.*?)['\"]?$", 
+                 lambda m, ctx: (f"Updating task {m.group(1)} to '{m.group(2).strip()}'." , 
                             [{"name": "update_todo", "input": {"user_id": user_id, "todo_id": int(m.group(1)), "title": m.group(2).strip()}}])),
             ]
         
         # Apply Rules
-        matched = False
         for intent, pattern, generator in rules:
             match = re.search(pattern, msg, re.IGNORECASE) if not is_urdu_msg else re.search(pattern, user_message)
             if match:
-                res_text, calls = generator(match)
+                # Pass context (last_id) to the generator if needed
+                res_text, calls = generator(match, last_id)
+                
                 response_text = res_text
                 tool_calls = calls
+                
                 if intent == "list":
                     tool_calls = [{
                         "tool_use_id": "mock_list_" + str(user_id),
@@ -182,5 +229,5 @@ class MockProvider(LLMProvider):
         return {
             "model": "local-mock-v1",
             "provider": "local",
-            "capabilities": ["english", "urdu", "voice-ready"]
+            "capabilities": ["english", "urdu", "voice-ready", "context-aware"]
         }

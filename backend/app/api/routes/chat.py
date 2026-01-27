@@ -1,0 +1,506 @@
+"""
+Chat API routes for Phase III AI Chatbot.
+
+Provides endpoints for conversational todo management with Phase III agent integration.
+"""
+
+import sys
+import os
+from pathlib import Path
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlmodel import Session, select
+from pydantic import BaseModel
+from typing import List, Dict, Any, Optional
+import asyncio
+from app.api.deps import get_db, get_current_user
+from app.models.user import User
+from app.models.task import Task
+
+router = APIRouter(prefix="/api/chat", tags=["Chat"])
+
+# Add phase_iii to path for imports
+# Calculate path: backend/app/api/routes/chat.py -> backend -> phase_iii
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent.parent
+PHASE_III_PATH = BACKEND_DIR.parent / "phase_iii"  # Go up from backend to project root, then phase_iii
+
+# Also try alternative path calculation
+if not PHASE_III_PATH.exists():
+    # Try: backend/app/api/routes/chat.py -> project root -> phase_iii
+    PROJECT_ROOT = BACKEND_DIR.parent
+    PHASE_III_PATH = PROJECT_ROOT / "phase_iii"
+
+if str(PHASE_III_PATH) not in sys.path:
+    sys.path.insert(0, str(PHASE_III_PATH))
+
+# Try to import Phase III components
+PHASE_III_AVAILABLE = False
+try:
+    from agent import create_agent, get_mcp_tool_definitions
+    from agent.config.agent_config import get_agent_config
+    from mcp_server.tools.todo_tools import (
+        create_todo_tool,
+        list_todos_tool,
+        update_todo_tool,
+        delete_todo_tool,
+        get_todo_tool
+    )
+    PHASE_III_AVAILABLE = True
+    print(f"[Chat API] ✅ Phase III components loaded successfully from: {PHASE_III_PATH}")
+except ImportError as e:
+    PHASE_III_AVAILABLE = False
+    print(f"[Chat API] ❌ Phase III components not available: {e}")
+    print(f"[Chat API] Tried path: {PHASE_III_PATH}")
+    print(f"[Chat API] Path exists: {PHASE_III_PATH.exists()}")
+    print("[Chat API] Using fallback response")
+except Exception as e:
+    PHASE_III_AVAILABLE = False
+    print(f"[Chat API] ❌ Error loading Phase III components: {e}")
+    import traceback
+    traceback.print_exc()
+    print("[Chat API] Using fallback response")
+
+
+class ChatMessage(BaseModel):
+    """Chat message model."""
+    role: str  # "user" or "assistant"
+    content: str
+    timestamp: Optional[str] = None
+
+
+class ChatRequest(BaseModel):
+    """Chat request model."""
+    message: str
+
+
+class ChatResponse(BaseModel):
+    """Chat response model."""
+    response: str
+    tool_calls: Optional[List[Dict[str, Any]]] = None
+
+
+class ChatHistoryResponse(BaseModel):
+    """Chat history response model."""
+    messages: List[ChatMessage]
+
+
+# Simple in-memory conversation storage (can be replaced with database later)
+_conversation_history: Dict[int, List[Dict[str, str]]] = {}
+
+
+def get_conversation_history(user_id: int, limit: int = 20) -> List[Dict[str, str]]:
+    """Get conversation history for user."""
+    return _conversation_history.get(user_id, [])[-limit:]
+
+
+def store_message(user_id: int, role: str, content: str):
+    """Store a message in conversation history."""
+    if user_id not in _conversation_history:
+        _conversation_history[user_id] = []
+    _conversation_history[user_id].append({"role": role, "content": content})
+
+
+async def execute_tool_calls_async(tool_calls: List[Dict[str, Any]], user_id: int, db: Session) -> List[Dict[str, Any]]:
+    """Execute MCP tool calls asynchronously using FastAPI database."""
+    from app.services.task_service import (
+        create_task as service_create_task,
+        get_user_tasks as service_get_user_tasks,
+        update_task as service_update_task,
+        delete_task as service_delete_task,
+        get_task_by_id as service_get_task_by_id,
+        toggle_task as service_toggle_task
+    )
+    from fastapi import HTTPException
+    
+    results = []
+    
+    for tool_call in tool_calls:
+        tool_name = tool_call.get("name", "")
+        tool_input = tool_call.get("input", {})
+        
+        try:
+            if tool_name == "create_todo":
+                # Create task using FastAPI service
+                title = tool_input.get("title", "")
+                if not title:
+                    results.append({
+                        "content": {
+                            "success": False,
+                            "error": "Title is required to create a task"
+                        }
+                    })
+                    continue
+                
+                # Use service function signature: create_task(db, user_id, description: str)
+                task = service_create_task(db, user_id, title)
+                results.append({
+                    "content": {
+                        "success": True,
+                        "todo_id": task.id,
+                        "title": task.description,
+                        "completed": task.is_complete
+                    }
+                })
+                
+            elif tool_name == "list_todos":
+                # List tasks using FastAPI service
+                tasks = service_get_user_tasks(db, user_id)
+                completed_filter = tool_input.get("completed")
+                
+                if completed_filter is not None:
+                    tasks = [t for t in tasks if t.is_complete == completed_filter]
+                
+                # Format tasks for process_tool_results
+                todos_list = [
+                    {
+                        "id": t.id,
+                        "title": t.description,
+                        "completed": t.is_complete
+                    }
+                    for t in tasks
+                ]
+                results.append({
+                    "content": {
+                        "success": True,
+                        "todos": todos_list
+                    }
+                })
+                    
+            elif tool_name == "update_todo":
+                # Update task using FastAPI service
+                todo_id = tool_input.get("todo_id")
+                title = tool_input.get("title")
+                completed = tool_input.get("completed")
+                
+                if not todo_id:
+                    results.append({
+                        "content": "Error: todo_id is required to update a task",
+                        "success": False
+                    })
+                    continue
+                
+                try:
+                    # Get existing task (will raise HTTPException if not found)
+                    task = service_get_task_by_id(db, todo_id, user_id)
+                    
+                    # Update description if provided
+                    if title:
+                        updated_task = service_update_task(db, todo_id, user_id, title)
+                    else:
+                        updated_task = task
+                    
+                    # Update completion status if provided
+                    if completed is not None:
+                        if task.is_complete != completed:
+                            # Toggle if needed
+                            if completed:
+                                updated_task = service_toggle_task(db, todo_id, user_id)
+                            else:
+                                # If uncompleting, toggle twice
+                                if task.is_complete:
+                                    updated_task = service_toggle_task(db, todo_id, user_id)
+                    
+                    results.append({
+                        "content": {
+                            "success": True,
+                            "todo_id": updated_task.id,
+                            "title": updated_task.description,
+                            "completed": updated_task.is_complete
+                        }
+                    })
+                except HTTPException as e:
+                    results.append({
+                        "content": {
+                            "success": False,
+                            "error": f"Task with ID {todo_id} not found"
+                        }
+                    })
+                
+            elif tool_name == "delete_todo":
+                # Delete task using FastAPI service
+                todo_id = tool_input.get("todo_id")
+                
+                if not todo_id:
+                    results.append({
+                        "content": {
+                            "success": False,
+                            "error": "todo_id is required to delete a task"
+                        }
+                    })
+                    continue
+                
+                try:
+                    # Get task before deletion for message
+                    task = service_get_task_by_id(db, todo_id, user_id)
+                except HTTPException:
+                    results.append({
+                        "content": {
+                            "success": False,
+                            "error": f"Task with ID {todo_id} not found"
+                        }
+                    })
+                    continue
+                
+                service_delete_task(db, todo_id, user_id)
+                results.append({
+                    "content": {
+                        "success": True,
+                        "todo_id": todo_id,
+                        "deleted": True
+                    }
+                })
+                
+            elif tool_name == "get_todo":
+                # Get task using FastAPI service
+                todo_id = tool_input.get("todo_id")
+                
+                if not todo_id:
+                    results.append({
+                        "content": {
+                            "success": False,
+                            "error": "todo_id is required to get a task"
+                        }
+                    })
+                    continue
+                
+                try:
+                    task = service_get_task_by_id(db, todo_id, user_id)
+                except HTTPException:
+                    results.append({
+                        "content": {
+                            "success": False,
+                            "error": f"Task with ID {todo_id} not found"
+                        }
+                    })
+                    continue
+                
+                results.append({
+                    "content": {
+                        "success": True,
+                        "todo_id": task.id,
+                        "title": task.description,
+                        "completed": task.is_complete
+                    }
+                })
+            else:
+                results.append({
+                    "content": {
+                        "success": False,
+                        "error": f"Unknown tool: {tool_name}"
+                    }
+                })
+                
+        except Exception as e:
+            print(f"Error executing tool {tool_name}: {e}")
+            import traceback
+            traceback.print_exc()
+            results.append({
+                "content": {
+                    "success": False,
+                    "error": f"Error executing {tool_name}: {str(e)}"
+                }
+            })
+    
+    return results
+
+
+@router.get("/history", response_model=ChatHistoryResponse)
+def get_chat_history(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get chat conversation history for the authenticated user.
+    """
+    history = get_conversation_history(current_user.id, limit=50)
+    
+    # Convert to ChatMessage format
+    messages = [
+        ChatMessage(
+            role=msg["role"],
+            content=msg["content"],
+            timestamp=None
+        )
+        for msg in history
+    ]
+    
+    return ChatHistoryResponse(messages=messages)
+
+
+@router.post("", response_model=ChatResponse)
+async def chat(
+    request: ChatRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Send a chat message and get AI response using Phase III agent.
+    """
+    if not request.message or not request.message.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Message cannot be empty"
+        )
+    
+    user_id = current_user.id
+    message = request.message.strip()
+    
+    # Store user message
+    store_message(user_id, "user", message)
+    
+    # Use Phase III Agent if available
+    if PHASE_III_AVAILABLE:
+        try:
+            # Get conversation history
+            history = get_conversation_history(user_id, limit=20)
+            history_messages = [
+                {"role": msg["role"], "content": msg["content"]}
+                for msg in history
+            ]
+            
+            # Create agent and get tools
+            agent = create_agent(api_key="mock", config=get_agent_config())
+            tools = get_mcp_tool_definitions()
+            
+            # Process message with agent
+            print(f"[Chat API] Processing message: {message[:50]}...")
+            print(f"[Chat API] History length: {len(history_messages)}")
+            print(f"[Chat API] Tools available: {len(tools)}")
+            
+            agent_response = agent.process_message(
+                user_message=message,
+                conversation_history=history_messages,
+                user_id=user_id,
+                tools=tools
+            )
+            
+            print(f"[Chat API] Agent response keys: {agent_response.keys() if isinstance(agent_response, dict) else 'Not a dict'}")
+            print(f"[Chat API] Requires tool execution: {agent_response.get('requires_tool_execution', False)}")
+            
+            # Execute tool calls if needed
+            final_response = agent_response.get("response_text", "")
+            tool_calls_executed = []
+            
+            print(f"[Chat API] Initial response: {final_response[:100] if final_response else 'Empty'}")
+            
+            if agent_response.get("requires_tool_execution") and agent_response.get("tool_calls"):
+                try:
+                    # Normalize tool calls format (mock provider uses different structure)
+                    tool_calls_to_execute = []
+                    for tc in agent_response["tool_calls"]:
+                        # Handle both formats: {"name": "...", "input": {...}} and {"name": "...", ...}
+                        if isinstance(tc, dict):
+                            tool_name = tc.get("name", "")
+                            tool_input = tc.get("input", {})
+                            # If no "input" key, use the whole dict except "name" and "tool_use_id"
+                            if not tool_input:
+                                tool_input = {k: v for k, v in tc.items() if k not in ["name", "tool_use_id"]}
+                            tool_calls_to_execute.append({
+                                "name": tool_name,
+                                "input": tool_input
+                            })
+                    
+                    print(f"[Chat API] Executing {len(tool_calls_to_execute)} tool calls")
+                    
+                    # Execute tools asynchronously
+                    tool_results = await execute_tool_calls_async(
+                        tool_calls_to_execute,
+                        user_id,
+                        db
+                    )
+                    
+                    print(f"[Chat API] Tool execution completed: {len(tool_results)} results")
+                    
+                    # Get final response from tool results
+                    try:
+                        final_agent_response = agent.process_tool_results(
+                            tool_results=tool_results,
+                            user_id=user_id
+                        )
+                        final_response = final_agent_response.get("response_text", final_response)
+                    except Exception as e:
+                        print(f"[Chat API] Error in process_tool_results: {e}")
+                        import traceback
+                        print(f"[Chat API] process_tool_results traceback:\n{traceback.format_exc()}")
+                        # Generate response from tool results manually
+                        if tool_results:
+                            result_messages = []
+                            for r in tool_results:
+                                content = r.get("content", {})
+                                if isinstance(content, dict):
+                                    if content.get("success", False):
+                                        if "todos" in content:
+                                            todos = content["todos"]
+                                            if todos:
+                                                task_list = "\n".join([
+                                                    f"{t.get('id')}. {t.get('title')} {'✅' if t.get('completed') else '⏳'}"
+                                                    for t in todos
+                                                ])
+                                                result_messages.append(f"Your tasks:\n{task_list}")
+                                            else:
+                                                result_messages.append("You have no tasks.")
+                                        elif "todo_id" in content:
+                                            todo_id = content["todo_id"]
+                                            if "deleted" in content:
+                                                result_messages.append(f"Successfully deleted task {todo_id}.")
+                                            elif "title" in content:
+                                                title = content["title"]
+                                                result_messages.append(f"Task '{title}' processed successfully (ID: {todo_id}).")
+                                elif isinstance(content, str):
+                                    result_messages.append(content)
+                            
+                            if result_messages:
+                                final_response = " ".join(result_messages)
+                            else:
+                                final_response = "I've processed your request successfully."
+                    
+                    tool_calls_executed = tool_calls_to_execute
+                except Exception as e:
+                    print(f"Error executing tools: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    final_response = final_response or "I processed your request, but encountered an error with tool execution."
+            
+            # Ensure we have a response
+            if not final_response or not final_response.strip():
+                # If no response from agent, try to generate one from tool results
+                if tool_calls_executed:
+                    # Extract results from tool execution
+                    tool_summaries = []
+                    for tool_call in tool_calls_executed:
+                        tool_name = tool_call.get("name", "unknown")
+                        tool_summaries.append(f"Executed {tool_name}")
+                    final_response = f"I've processed your request. {', '.join(tool_summaries)}."
+                else:
+                    final_response = "I've processed your request."
+            
+            print(f"[Chat API] Final response: {final_response[:100]}")
+            
+            # Store assistant response
+            store_message(user_id, "assistant", final_response)
+            
+            return ChatResponse(
+                response=final_response,
+                tool_calls=tool_calls_executed if tool_calls_executed else None
+            )
+            
+        except Exception as e:
+            error_msg = str(e)
+            print(f"[Chat API] ❌ Error in Phase III agent: {error_msg}")
+            import traceback
+            full_traceback = traceback.format_exc()
+            print(f"[Chat API] Full traceback:\n{full_traceback}")
+            
+            # Return detailed error for debugging (can be made user-friendly later)
+            return ChatResponse(
+                response=f"I encountered an error: {error_msg}. Please check the backend logs for details. Error type: {type(e).__name__}"
+            )
+    
+    # Fallback response if Phase III not available
+    return ChatResponse(
+        response="I'm your AI todo assistant! I can help you manage your tasks. Try saying:\n"
+                "• 'Add a task to buy groceries'\n"
+                "• 'Show my tasks'\n"
+                "• 'Mark task 1 as complete'\n"
+                "• 'Delete task 1'\n\n"
+                "Note: Phase III agent integration is in progress. For full functionality, please use the Gradio app."
+    )

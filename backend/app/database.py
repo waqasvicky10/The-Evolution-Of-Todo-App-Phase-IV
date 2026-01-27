@@ -7,15 +7,43 @@ Provides SQLModel engine, session factory, and database initialization.
 from sqlmodel import create_engine, Session, SQLModel
 from typing import Generator
 from app.config import settings
+import re
+
+
+# Debug: Print DATABASE_URL (with password masked for security)
+def mask_password(url: str) -> str:
+    """Mask password in connection string for safe logging."""
+    # Pattern: postgresql://user:password@host/db
+    return re.sub(r'(://[^:]+:)([^@]+)(@)', r'\1****\3', url)
+
+if settings.ENVIRONMENT == "development":
+    print(f"[Database] DATABASE_URL = {mask_password(settings.DATABASE_URL)}")
+    print(f"[Database] Database type: {'PostgreSQL' if settings.DATABASE_URL.startswith('postgresql') else 'SQLite'}")
 
 
 # Create database engine
 # Support both PostgreSQL and SQLite (for local development without PostgreSQL)
+# Add connection timeout and pool settings for better reliability
+connect_args = {}
+if settings.DATABASE_URL.startswith("sqlite"):
+    connect_args["check_same_thread"] = False
+else:
+    # PostgreSQL connection args - optimized for Neon
+    connect_args["connect_timeout"] = 5  # Reduced to 5 seconds
+    # sslmode is already in connection string, don't duplicate
+
+# Optimize engine settings for faster connections
 engine = create_engine(
     settings.DATABASE_URL,
-    echo=True if settings.ENVIRONMENT == "development" else False,
+    echo=False,  # Disable SQL logging for performance (was: True if development)
     pool_pre_ping=True,  # Verify connections before using
-    connect_args={"check_same_thread": False} if settings.DATABASE_URL.startswith("sqlite") else {}
+    pool_size=2,  # Smaller pool for faster startup (was: 5)
+    max_overflow=5,  # Reduced overflow (was: 10)
+    pool_timeout=10,  # Faster timeout (was: 30)
+    pool_recycle=3600,  # Recycle connections after 1 hour
+    connect_args=connect_args,
+    # Use faster connection strategy
+    execution_options={"autocommit": False}
 )
 
 

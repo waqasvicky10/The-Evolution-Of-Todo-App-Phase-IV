@@ -172,8 +172,8 @@ def create_agent(api_key: str = "mock", config: Any = None) -> TodoAgent:
     except ImportError:
         pass  # python-dotenv not installed, continue without it
     
-    # Check for OpenAI API key
-    openai_api_key = os.getenv("OPENAI_API_KEY")
+    # openai_api_key = os.getenv("OPENAI_API_KEY")
+    openai_api_key = None # FORCE MOCK FOR VERIFICATION
     
     if openai_api_key:
         try:

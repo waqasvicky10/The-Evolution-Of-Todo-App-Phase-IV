@@ -7,7 +7,7 @@ Main application instance with CORS configuration and route registration.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.api.routes import auth, tasks
+from app.api.routes import auth, tasks, chat
 from app.routes import ai
 from app.database import init_db
 
@@ -20,24 +20,25 @@ app = FastAPI(
 )
 
 
-# Initialize database tables on startup
+# Skip database initialization on startup for faster server start
+# Tables will be created by Alembic migrations or on first use
 @app.on_event("startup")
-def startup_event():
-    init_db()
+async def startup_event():
+    """Fast startup - database tables created via migrations."""
+    print("[Startup] Server starting (database tables should be created via migrations)")
+    # Don't call init_db() - it's slow and tables should exist from migrations
+    # If tables don't exist, they'll be created on first request (slower but server starts fast)
 
 
 # Configure CORS - allow all localhost origins for development
+# Using allow_origins=["*"] for development to fix CORS issues
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:3001",
-    ],
+    allow_origins=["*"],  # Allow all origins for development (change in production)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 
@@ -45,6 +46,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(tasks.router)
 app.include_router(ai.router)
+app.include_router(chat.router)  # Phase III chat endpoints
 
 
 @app.get("/")

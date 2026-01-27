@@ -11,8 +11,8 @@ from pydantic import BaseModel
 from sqlmodel import Session
 
 from ..database import get_session
-from ..models import User
-from ..auth import get_current_user
+from ..models.user import User
+from ..api.deps import get_current_user
 from ..services.ai_service import ai_service, TaskSuggestion, TaskAnalysis
 
 

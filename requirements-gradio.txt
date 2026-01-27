@@ -1,0 +1,5 @@
+# Requirements for Gradio Todo App (Phase III)
+gradio>=4.0.0
+openai>=1.0.0  # Optional: Whisper API (paid). Skip if using free option.
+python-dotenv>=1.0.0  # Load OPENAI_API_KEY from .env
+SpeechRecognition>=3.10.0  # Free voice transcription via Google (no API key, needs internet)
