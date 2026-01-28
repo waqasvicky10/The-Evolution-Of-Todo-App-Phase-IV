@@ -138,9 +138,9 @@ class MockProvider(LLMProvider):
             rules = [
                 ("list", r"(فہرست|لسٹ|دکھا|دیکھ|بتا|کیا ہے|کیا ہیں|میرے کام|ٹاسک|لسٹ)", 
                  lambda m, ctx: ("آپ کی ٹو ڈو فہرست حاصل کی جا رہی ہے...", [])),
-                ("add", r"(.*?)\s*(شامل کریں|شامل کرو|لکھیں|ایڈ کریں|ڈالیں|ڈالو|اضافہ کرو|کریں|بنائیں)", 
-                 lambda m, ctx: (f"جی بالکل! میں '{m.group(1).strip()}' کو آپ کی فہرست میں شامل کر رہا ہوں۔", 
-                            [{"name": "create_todo", "input": {"user_id": user_id, "title": m.group(1).strip()}}])),
+                ("add", r"(?:^|\s)(.+)\s+(?:شامل کریں|شامل کرو|لکھیں|ایڈ کریں|ڈالیں|ڈالو|اضافہ کریں|اضافہ کرو|کریں|بنائیں)(?:\s+(.+))?", 
+                 lambda m, ctx: (f"جی بالکل! میں '{m.group(1).strip() + (' ' + m.group(2).strip() if m.group(2) else '')}' کو آپ کی فہرست میں شامل کر رہا ہوں۔", 
+                            [{"name": "create_todo", "input": {"user_id": user_id, "title": m.group(1).strip() + (" " + m.group(2).strip() if m.group(2) else "")}}])),
                             
                 # Context-aware updates/deletes in Urdu 
                 # (Simplified for Hackathon - assumes explicit IDs mostly, but could support 'it' if Urdu grammar supported here)
@@ -164,6 +164,11 @@ class MockProvider(LLMProvider):
                  lambda m, ctx: ("Fetching your todo list...", [])),
                  
                 ("add", r"(?:add|create|new task|remember to|remind me to)\s+(?:a task to|a task|to|task|that)?\s*(.+)", 
+                 lambda m, ctx: (f"Sure! I'll add '{m.group(1).strip().capitalize()}' to your list.", 
+                            [{"name": "create_todo", "input": {"user_id": user_id, "title": m.group(1).strip().capitalize()}}])),
+
+                # Implicit "Task [description]" for voice/shorthand (e.g. "a task by groceries")
+                ("add_implicit", r"(?:^|\s)(?:a\s+)?task\s+(?!id\b|number\b|\d)(?:to\s+|about\s+|by\s+|for\s+)?(.+)", 
                  lambda m, ctx: (f"Sure! I'll add '{m.group(1).strip().capitalize()}' to your list.", 
                             [{"name": "create_todo", "input": {"user_id": user_id, "title": m.group(1).strip().capitalize()}}])),
                 

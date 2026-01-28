@@ -1,0 +1,33 @@
+
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.git
+.gitignore
+.vercel
+node_modules/
+backend/
+frontend/
+phase_i/
+# Exclude huge documentation files
+*.docx
+*.pdf
+# Exclude local database
+todo.db
+todo.db.bak
+# Exclude artifacts and heavy markdown logs if any
+PROJECT_COMPLETION_REPORT.md
