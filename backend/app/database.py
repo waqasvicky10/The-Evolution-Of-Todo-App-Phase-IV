@@ -33,18 +33,32 @@ else:
     # sslmode is already in connection string, don't duplicate
 
 # Optimize engine settings for faster connections
-engine = create_engine(
-    settings.DATABASE_URL,
-    echo=False,  # Disable SQL logging for performance (was: True if development)
-    pool_pre_ping=True,  # Verify connections before using
-    pool_size=2,  # Smaller pool for faster startup (was: 5)
-    max_overflow=5,  # Reduced overflow (was: 10)
-    pool_timeout=10,  # Faster timeout (was: 30)
-    pool_recycle=3600,  # Recycle connections after 1 hour
-    connect_args=connect_args,
-    # Use faster connection strategy
-    execution_options={"autocommit": False}
-)
+import os
+_is_serverless = os.environ.get("VERCEL", "") == "1" or os.environ.get("AWS_LAMBDA_FUNCTION_NAME", "")
+
+if _is_serverless:
+    engine = create_engine(
+        settings.DATABASE_URL,
+        echo=False,
+        pool_pre_ping=True,
+        pool_size=1,
+        max_overflow=2,
+        pool_timeout=10,
+        pool_recycle=300,
+        connect_args=connect_args,
+    )
+else:
+    engine = create_engine(
+        settings.DATABASE_URL,
+        echo=False,
+        pool_pre_ping=True,
+        pool_size=2,
+        max_overflow=5,
+        pool_timeout=10,
+        pool_recycle=3600,
+        connect_args=connect_args,
+        execution_options={"autocommit": False}
+    )
 
 
 def init_db() -> None:

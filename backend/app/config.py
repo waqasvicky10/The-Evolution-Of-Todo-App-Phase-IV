@@ -11,7 +11,8 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     # Database - defaults to SQLite for local development
-    DATABASE_URL: str = "sqlite:///./todo.db"
+    # On Vercel, /tmp is the only writable directory
+    DATABASE_URL: str = "sqlite:////tmp/todo.db" if __import__('os').environ.get("VERCEL") == "1" else "sqlite:///./todo.db"
 
     # Security
     SECRET_KEY: str
