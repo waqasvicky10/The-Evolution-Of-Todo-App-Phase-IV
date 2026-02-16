@@ -1,0 +1,42 @@
+# .dockerignore
+# Node.js
+node_modules
+npm-debug.log
+build
+.next
+out
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.venv
+venv
+env
+.pytest_cache
+.coverage
+htmlcov
+
+# Local DB
+*.sqlite
+*.sqlite3-journal
+
+# Secrets/Env
+.env
+.env.local
+.env.production
+.secrets
+
+# Git
+.git
+.gitignore
+
+# K8s/Docker
+docker
+charts
+k8s
+
+# OS
+.DS_Store
+Thumbs.db

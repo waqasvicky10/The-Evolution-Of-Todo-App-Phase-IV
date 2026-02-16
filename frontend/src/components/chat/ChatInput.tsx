@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect } from "react";
+import { useLanguage } from "@/context/LanguageContext";
 
 /**
  * ChatInput component.
@@ -23,9 +24,9 @@ declare global {
 }
 
 export default function ChatInput({ onSendMessage, isLoading }: ChatInputProps) {
+    const { language, t } = useLanguage();
     const [message, setMessage] = useState("");
     const [isListening, setIsListening] = useState(false);
-    const [voiceLang, setVoiceLang] = useState<"en-US" | "ur-PK">("en-US");
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const recognitionRef = useRef<any>(null);
 
@@ -85,14 +86,11 @@ export default function ChatInput({ onSendMessage, isLoading }: ChatInputProps) 
             recognitionRef.current.stop();
             setIsListening(false);
         } else {
-            recognitionRef.current.lang = voiceLang;
+            // Map global language to speech recognition language code
+            recognitionRef.current.lang = language === "ur" ? "ur-PK" : "en-US";
             recognitionRef.current.start();
             setIsListening(true);
         }
-    };
-
-    const toggleLanguage = () => {
-        setVoiceLang((prev) => (prev === "en-US" ? "ur-PK" : "en-US"));
     };
 
     useEffect(() => {
@@ -105,12 +103,9 @@ export default function ChatInput({ onSendMessage, isLoading }: ChatInputProps) 
     return (
         <div className="p-4 bg-white border-t border-gray-200">
             <div className="max-w-4xl mx-auto mb-2 flex justify-end space-x-2">
-                <button
-                    onClick={toggleLanguage}
-                    className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
-                >
-                    🎤 {voiceLang === "en-US" ? "English (US)" : "Urdu (PK)"}
-                </button>
+                <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-600">
+                    🎤 {language === "ur" ? t("chat.voice.ur") : t("chat.voice.en")}
+                </span>
             </div>
             <form onSubmit={handleSubmit} className="relative max-w-4xl mx-auto flex items-end space-x-2">
                 <div className="flex-1 relative">
@@ -119,7 +114,7 @@ export default function ChatInput({ onSendMessage, isLoading }: ChatInputProps) 
                         value={message}
                         onChange={(e) => setMessage(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        placeholder={isListening ? "Listening..." : "Type or speak your message..."}
+                        placeholder={isListening ? t("chat.listening") : t("chat.input.placeholder")}
                         className={`w-full p-3 pr-12 text-sm text-gray-900 bg-gray-50 rounded-2xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none overflow-y-auto transition-all duration-200 ease-in-out scrollbar-hide min-h-[44px] max-h-[200px] ${isListening ? "ring-2 ring-red-400 border-transparent animate-pulse" : ""
                             }`}
                         rows={1}
@@ -132,8 +127,8 @@ export default function ChatInput({ onSendMessage, isLoading }: ChatInputProps) 
                     onClick={toggleListening}
                     disabled={isLoading}
                     className={`p-3 rounded-xl transition-all duration-200 shadow-sm ${isListening
-                            ? "bg-red-500 text-white animate-pulse"
-                            : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                        ? "bg-red-500 text-white animate-pulse"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                         }`}
                     title={isListening ? "Stop listening" : "Start voice input"}
                 >
@@ -146,8 +141,8 @@ export default function ChatInput({ onSendMessage, isLoading }: ChatInputProps) 
                     type="submit"
                     disabled={!message.trim() || isLoading}
                     className={`p-3 rounded-xl transition-all duration-200 shadow-sm ${!message.trim() || isLoading
-                            ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                            : "bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-md active:scale-95"
+                        ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                        : "bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-md active:scale-95"
                         }`}
                 >
                     {isLoading ? (

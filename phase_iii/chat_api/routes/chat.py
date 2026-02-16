@@ -12,7 +12,12 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-from phase_iii.chat_api.schemas.chat_schemas import (
+import sys
+import os
+# Add the project root to the path to allow imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+from chat_api.schemas.chat_schemas import (
     ChatMessageRequest,
     ChatMessageResponse,
     ConversationHistoryResponse,
@@ -20,21 +25,21 @@ from phase_iii.chat_api.schemas.chat_schemas import (
     ToolCall
 )
 
-from phase_iii.agent import create_agent, get_mcp_tool_definitions
-from phase_iii.agent.config.agent_config import get_agent_config
+from agent import create_agent, get_mcp_tool_definitions
+from agent.config.agent_config import get_agent_config
 
-from phase_iii.persistence.repositories.conversation_repo import (
+from persistence.repositories.conversation_repo import (
     store_message,
     get_recent_messages,
     get_conversation_context
 )
-from phase_iii.persistence.repositories.tool_call_repo import (
+from persistence.repositories.tool_call_repo import (
     store_tool_call
 )
-from phase_iii.persistence.models.conversation import MessageRole
-from phase_iii.persistence.models.tool_call import ToolCallStatus
+from persistence.models.conversation import MessageRole
+from persistence.models.tool_call import ToolCallStatus
 
-from phase_iii.mcp_server.tools.todo_tools import (
+from mcp_server.tools.todo_tools import (
     create_todo_tool,
     list_todos_tool,
     update_todo_tool,
@@ -156,7 +161,7 @@ async def chat(
         logger.info(f"Stored user message with ID: {user_msg.id}")
 
         # Step 3: Get AI agent
-        agent = create_agent(api_key="mock", config=get_agent_config())
+        agent = create_agent(api_key=os.getenv("OPENAI_API_KEY", "mock"), config=get_agent_config())
         tools = get_mcp_tool_definitions()
 
         # Step 4: Invoke agent

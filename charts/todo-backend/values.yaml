@@ -1,0 +1,38 @@
+# Default values for todo-backend.
+replicaCount: 1
+
+image:
+  repository: todo-backend
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+service:
+  type: ClusterIP
+  port: 8000
+
+env:
+  MOCK_MODE: "true"
+  DATABASE_URL: "sqlite:///./data/todo.db"
+
+persistence:
+  enabled: true
+  size: 1Gi
+  mountPath: /app/data
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Probes
+livenessProbe:
+  httpGet:
+    path: /
+    port: 8000
+readinessProbe:
+  httpGet:
+    path: /
+    port: 8000

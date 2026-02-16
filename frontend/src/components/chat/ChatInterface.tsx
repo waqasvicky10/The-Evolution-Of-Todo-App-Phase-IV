@@ -12,7 +12,7 @@ import { useAuth } from "@/contexts/AuthContext";
  * Orchestrates the chat experience within the Next.js app.
  */
 
-const API_BASE_URL = "http://localhost:8000/api";
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "");
 
 export default function ChatInterface() {
     const { user, accessToken } = useAuth();
@@ -35,7 +35,7 @@ export default function ChatInterface() {
             if (!accessToken) return;
 
             try {
-                const response = await axios.get(`${API_BASE_URL}/chat/history`, {
+                const response = await axios.get(`${API_BASE_URL}/api/chat/history`, {
                     headers: { Authorization: `Bearer ${accessToken}` },
                     timeout: 30000  // 30 second timeout
                 });
@@ -70,7 +70,7 @@ export default function ChatInterface() {
 
         try {
             const response = await axios.post(
-                `${API_BASE_URL}/chat`,
+                `${API_BASE_URL}/api/chat`,
                 { message: content },
                 { headers: { Authorization: `Bearer ${accessToken}` } }
             );

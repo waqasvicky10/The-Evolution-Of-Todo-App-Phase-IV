@@ -47,14 +47,16 @@ class TodoAgent:
         user_message: str,
         conversation_history: List[Dict[str, str]],
         user_id: int,
-        tools: Optional[List[Dict[str, Any]]] = None
+        tools: Optional[List[Dict[str, Any]]] = None,
+        system_prompt: Optional[str] = None
     ) -> Dict[str, Any]:
         """Process a user message via the provider."""
         return self.provider.process_message(
             user_message=user_message,
             conversation_history=conversation_history,
             user_id=user_id,
-            tools=tools
+            tools=tools,
+            system_prompt=system_prompt
         )
     
     def process_voice_command(
@@ -62,7 +64,8 @@ class TodoAgent:
         transcribed_text: str,
         user_id: int,
         conversation_history: List[Dict[str, str]] = None,
-        tools: Optional[List[Dict[str, Any]]] = None
+        tools: Optional[List[Dict[str, Any]]] = None,
+        system_prompt: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Entry point for voice commands (transcribed text).
@@ -75,7 +78,8 @@ class TodoAgent:
             user_message=clean_text,
             conversation_history=conversation_history or [],
             user_id=user_id,
-            tools=tools
+            tools=tools,
+            system_prompt=system_prompt
         )
     
     def process_tool_results(self, tool_results: List[Dict[str, Any]], user_id: int) -> Dict[str, Any]:
@@ -129,11 +133,34 @@ class TodoAgent:
                 todo_id = content['todo_id']
                 if "deleted" in content:
                     responses.append(f"ٹاسک {todo_id} کامیابی سے حذف کر دیا گیا۔" if is_urdu_context else f"Successfully deleted task {todo_id}.")
+                elif "message" in content:
+                    # Custom message from tool (e.g. Skill patterns)
+                    responses.append(content["message"])
                 elif "title" in content:
                     title = content['title']
                     responses.append(f"ٹاسک '{title}' کامیابی سے محفوظ کر لیا گیا (آئی ڈی: {todo_id})۔" if is_urdu_context else f"Task '{title}' has been processed successfully (ID: {todo_id}).")
                 else:
                     responses.append(f"ٹاسک {todo_id} پر عمل درآمد کامیاب رہا۔" if is_urdu_context else f"Operation on task {todo_id} was successful.")
+            elif "tasks" in content:
+                # Beautiful ListTasks formatting or default summary
+                if "message" in content and not is_urdu_context:
+                    responses.append(content["message"])
+                else:
+                    count = content.get('count', len(content['tasks']))
+                    status = content.get('status', 'tasks')
+                    responses.append(f"مجھے آپ کے {count} {status} مل گئے ہیں۔" if is_urdu_context else f"I found {count} {status}.")
+            
+            elif "email" in content:
+                # Handle GetUserContext / UserInfoSubagent response pattern
+                email = content["email"]
+                if is_urdu_context:
+                    responses.append(f"آپ {email} کے طور پر لاگ ان ہیں۔")
+                else:
+                    responses.append(f"You are logged in as {email}")
+            
+            else:
+                # Default success message for other tool calls
+                responses.append("ٹول کا کال کامیاب رہا۔" if is_urdu_context else "Tool call execution was successful.")
         
         final_response = " ".join(responses) if responses else ("آپ کی فہرست اپ ڈیٹ کر دی گئی ہے!" if is_urdu_context else "I've updated your list as requested!")
         
@@ -168,25 +195,78 @@ def create_agent(api_key: str = "mock", config: Any = None) -> TodoAgent:
     # Try to load .env file if available
     try:
         from dotenv import load_dotenv
-        load_dotenv()
+        from pathlib import Path
+        
+        # Load from multiple locations to ensure we get the AI_MODEL setting
+        # Priority: backend/.env > project_root/.env
+        current_file = Path(__file__).resolve()
+        phase_iii_dir = current_file.parent.parent  # phase_iii directory
+        project_root = phase_iii_dir.parent  # project root
+        backend_dir = project_root / "backend"
+        
+        # Load from project root first
+        root_env = project_root / ".env"
+        if root_env.exists():
+            load_dotenv(root_env, override=True)
+            logger.info(f"Loaded .env from project root: {root_env}")
+        
+        # Load from backend second (will override if duplicate keys exist)
+        backend_env = backend_dir / ".env"
+        if backend_env.exists():
+            load_dotenv(backend_env, override=True)
+            logger.info(f"Loaded .env from backend: {backend_env}")
+            
     except ImportError:
         pass  # python-dotenv not installed, continue without it
     
-    # openai_api_key = os.getenv("OPENAI_API_KEY")
-    openai_api_key = None # FORCE MOCK FOR VERIFICATION
+    # Priority:
+    # 1. Configured AI_MODEL (if available)
+    # 2. Passed api_key (if not "mock")
+    # 3. OPENAI_API_KEY environment variable
+    
+    ai_model = os.getenv("AI_MODEL", "openai")
+    
+    if ai_model == "mock":
+        logger.info("AI_MODEL is 'mock'. Using MockProvider.")
+        provider = MockProvider()
+        return TodoAgent(provider=provider)
+    
+    if ai_model == "qwen":
+        qwen_api_key = os.getenv("QWEN_API_KEY")
+        if qwen_api_key:
+            try:
+                from .providers.qwen_provider import QwenProvider
+                base_url = os.getenv("QWEN_API_BASE", "https://dashscope-intl.aliyuncs.com/compatible-mode/v1")
+                model_name = os.getenv("QWEN_MODEL_NAME", "qwen-plus")
+                
+                provider = QwenProvider(
+                    api_key=qwen_api_key,
+                    base_url=base_url,
+                    model_name=model_name,
+                    config=config
+                )
+                return TodoAgent(provider=provider)
+            except Exception as e:
+                logger.error(f"Failed to initialize QwenProvider: {e}, falling back to MockProvider")
+    
+    openai_api_key = api_key if api_key and api_key != "mock" else os.getenv("OPENAI_API_KEY")
     
     if openai_api_key:
+        logger.info(f"Found OpenAI API Key (starts with {openai_api_key[:8]}...). Initializing OpenAIProvider...")
         try:
             from .providers.openai_provider import OpenAIProvider
             provider = OpenAIProvider(api_key=openai_api_key, config=config)
-            logger.info("Using OpenAIProvider")
+            logger.info(f"Successfully initialized OpenAIProvider with model: {getattr(provider, 'model', 'default')}")
             return TodoAgent(provider=provider)
         except ImportError:
-            logger.warning("OpenAI package not available, falling back to MockProvider")
+            logger.error("OpenAI package not available but key provided. Please install 'openai'.")
+            raise
         except Exception as e:
-            logger.error(f"Failed to initialize OpenAIProvider: {e}, falling back to MockProvider")
+            logger.error(f"Failed to initialize OpenAIProvider: {e}")
+            raise  # Do not fallback to MockProvider if key is present causing confusion
     
-    # Fallback to MockProvider
+    # Fallback to MockProvider ONLY if no key is present
+    logger.warning("No OpenAI API Key found. Falling back to MockProvider.")
     provider = MockProvider()
     logger.info("Using MockProvider (fallback)")
     return TodoAgent(provider=provider)

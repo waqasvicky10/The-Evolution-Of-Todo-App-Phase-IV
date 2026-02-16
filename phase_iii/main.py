@@ -33,10 +33,15 @@ CHAT_UI_DIR = os.path.join(BASE_DIR, "chat_ui")
 
 # Try to import and include chat routes
 try:
-    from phase_iii.chat_api.routes.chat import router as chat_router
-    from phase_iii.persistence.repositories.conversation_repo import init_conversation_tables
-    from phase_iii.persistence.repositories.tool_call_repo import init_tool_call_tables
-    from phase_iii.mcp_server.tools.todo_tools import init_todo_tables
+    import sys
+    import os
+    # Add the current directory to the path to allow relative imports
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    
+    from chat_api.routes.chat import router as chat_router
+    from persistence.repositories.conversation_repo import init_conversation_tables
+    from persistence.repositories.tool_call_repo import init_tool_call_tables
+    from mcp_server.tools.todo_tools import init_todo_tables
     
     # Initialize database tables
     try:

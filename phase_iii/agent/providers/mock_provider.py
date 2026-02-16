@@ -160,6 +160,14 @@ class MockProvider(LLMProvider):
         else:
             # English Rules
             rules = [
+                # Status-specific lists (must come before general list pattern)
+                ("list_pending", r"(?:what's|what is|show|list|get).*(pending|incomplete|unfinished|not done|to.?do|left)", 
+                 lambda m, ctx: ("Fetching your pending tasks...", [])),
+                 
+                ("list_completed", r"(?:what|show|list|get).*(completed|finished|done|complete)", 
+                 lambda m, ctx: ("Fetching your completed tasks...", [])),
+                
+                # General list (catch-all)
                 ("list", r"(show|list|get|fetch|what are|display).*(task|todo|list|items)", 
                  lambda m, ctx: ("Fetching your todo list...", [])),
                  
@@ -208,6 +216,18 @@ class MockProvider(LLMProvider):
                         "tool_use_id": "mock_list_" + str(user_id),
                         "name": "list_todos",
                         "input": {"user_id": user_id}
+                    }]
+                elif intent == "list_pending":
+                    tool_calls = [{
+                        "tool_use_id": "mock_list_pending_" + str(user_id),
+                        "name": "list_todos",
+                        "input": {"user_id": user_id, "completed": False}
+                    }]
+                elif intent == "list_completed":
+                    tool_calls = [{
+                        "tool_use_id": "mock_list_completed_" + str(user_id),
+                        "name": "list_todos",
+                        "input": {"user_id": user_id, "completed": True}
                     }]
                 elif tool_calls:
                     for i, call in enumerate(tool_calls):

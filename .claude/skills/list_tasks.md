@@ -1,0 +1,5 @@
+# Skill: ListTasks
+Description: List the user's current tasks.
+Tool: `list_tasks(user_id, status)`
+Purpose: Retrieving tasks for display.
+Usage: "What are my tasks?" -> `list_tasks()`.

@@ -9,6 +9,7 @@
 
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
+import LanguageSwitcher from "./LanguageSwitcher";
 
 
 export default function Navbar() {
@@ -47,6 +48,7 @@ export default function Navbar() {
 
           {/* Right side - User info and logout */}
           <div className="flex items-center space-x-4">
+            <LanguageSwitcher />
             {user && (
               <span className="text-sm text-gray-600 hidden sm:inline-block">
                 {user.email}

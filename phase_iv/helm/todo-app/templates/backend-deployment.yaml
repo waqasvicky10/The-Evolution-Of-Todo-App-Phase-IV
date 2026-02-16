@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todo-backend
+  namespace: todo-app
+  labels:
+    app: {{ .Chart.Name }}
+    component: backend
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Chart.Name }}
+      component: backend
+  template:
+    metadata:
+      labels:
+        app: {{ .Chart.Name }}
+        component: backend
+    spec:
+      containers:
+      - name: backend
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        - name: DATABASE_PATH
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Chart.Name }}-config
+              key: DATABASE_PATH
+        - name: PYTHONPATH
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Chart.Name }}-config
+              key: PYTHONPATH
+        - name: PYTHONUNBUFFERED
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Chart.Name }}-config
+              key: PYTHONUNBUFFERED
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: todo-app-secret
+              key: SECRET_KEY
+        - name: AI_MODEL
+          value: "qwen"
+        - name: QWEN_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: todo-app-secrets-qwen
+              key: QWEN_API_KEY
+        - name: TODO_DB_PATH
+          value: {{ .Values.persistence.path }}
+        volumeMounts:
+        - name: todo-db-storage
+          mountPath: /app/data
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+      volumes:
+      - name: todo-db-storage
+        persistentVolumeClaim:
+          claimName: todo-db-pvc

@@ -31,9 +31,16 @@ from mcp.types import Tool, TextContent
 # Import tool implementations
 from phase_iii.mcp_server.tools.todo_tools import (
     create_todo_tool,
+    add_task_tool,
+    get_user_context_tool,
     list_todos_tool,
+    list_tasks_tool,
+    search_tasks_tool,
     update_todo_tool,
+    update_task_tool,
+    complete_task_tool,
     delete_todo_tool,
+    remove_task_tool,
     get_todo_tool
 )
 
@@ -74,17 +81,31 @@ class TodoMCPServer:
 
         Tools registered:
             - create_todo: Create a new todo item
+            - add_task: Create a new todo item (alias)
+            - get_user_context: Retrieve user identity and metadata
             - list_todos: List user's todo items
+            - list_tasks: List user's todo items (alias)
+            - search_tasks: Search and filter tasks (alias)
             - update_todo: Update an existing todo
+            - update_task: Update an existing todo (alias)
+            - complete_task: Mark a todo as completed (alias)
             - delete_todo: Delete a todo item
+            - remove_task: Delete a todo item (alias)
             - get_todo: Get a specific todo by ID
         """
         # Register tool handlers
         self.tools = {
+            "get_user_context": get_user_context_tool,
             "create_todo": create_todo_tool,
+            "add_task": add_task_tool,
             "list_todos": list_todos_tool,
+            "list_tasks": list_tasks_tool,
+            "search_tasks": search_tasks_tool,
             "update_todo": update_todo_tool,
+            "update_task": update_task_tool,
+            "complete_task": complete_task_tool,
             "delete_todo": delete_todo_tool,
+            "remove_task": remove_task_tool,
             "get_todo": get_todo_tool
         }
 
@@ -93,8 +114,22 @@ class TodoMCPServer:
         async def handle_list_tools() -> List[Tool]:
             """Return list of available tools."""
             return [
-                Tool(
-                    name="create_todo",
+            Tool(
+                name="get_user_context",
+                description="Retrieve user profile and identity context (email, name, registration date)",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "user_id": {
+                            "type": "integer",
+                            "description": "ID of the authenticated user"
+                        }
+                    },
+                    "required": ["user_id"]
+                }
+            ),
+            Tool(
+                name="create_todo",
                     description="Create a new todo item for a user",
                     inputSchema={
                         "type": "object",
@@ -105,11 +140,37 @@ class TodoMCPServer:
                             },
                             "title": {
                                 "type": "string",
-                                "description": "Todo item title/description"
+                                "description": "Todo item title"
+                            },
+                            "description": {
+                                "type": "string",
+                                "description": "Additional description or notes (optional)"
                             },
                             "completed": {
                                 "type": "boolean",
                                 "description": "Initial completion status (default: false)"
+                            }
+                        },
+                        "required": ["user_id", "title"]
+                    }
+                ),
+                Tool(
+                    name="add_task",
+                    description="Create a new todo item for a user",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "user_id": {
+                                "type": "integer",
+                                "description": "ID of the authenticated user"
+                            },
+                            "title": {
+                                "type": "string",
+                                "description": "Task title"
+                            },
+                            "description": {
+                                "type": "string",
+                                "description": "Optional task description/details"
                             }
                         },
                         "required": ["user_id", "title"]
@@ -128,6 +189,82 @@ class TodoMCPServer:
                             "completed": {
                                 "type": "boolean",
                                 "description": "Filter by completion status (optional)"
+                            },
+                            "status": {
+                                "type": "string",
+                                "description": "Filter by status: 'all', 'pending', or 'completed' (optional, default: 'all')"
+                            },
+                            "priority": {
+                                "type": "string",
+                                "description": "Filter by priority: 'high', 'medium', or 'low' (optional)"
+                            },
+                            "category": {
+                                "type": "string",
+                                "description": "Filter by category (optional)"
+                            },
+                            "keyword": {
+                                "type": "string",
+                                "description": "Search keyword in description (optional)"
+                            }
+                        },
+                        "required": ["user_id"]
+                    }
+                ),
+                Tool(
+                    name="list_tasks",
+                    description="List all todo items for a user with optional search/filters",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "user_id": {
+                                "type": "integer",
+                                "description": "ID of the authenticated user"
+                            },
+                            "status": {
+                                "type": "string",
+                                "description": "Filter by status: 'all', 'pending', or 'completed' (optional, default: 'all')"
+                            },
+                            "priority": {
+                                "type": "string",
+                                "description": "Filter by priority: 'high', 'medium', or 'low' (optional)"
+                            },
+                            "category": {
+                                "type": "string",
+                                "description": "Filter by category (optional)"
+                            },
+                            "keyword": {
+                                "type": "string",
+                                "description": "Search keyword in description (optional)"
+                            }
+                        },
+                        "required": ["user_id"]
+                    }
+                ),
+                Tool(
+                    name="search_tasks",
+                    description="Search and filter tasks by keywords, priority, and category",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "user_id": {
+                                "type": "integer",
+                                "description": "ID of the authenticated user"
+                            },
+                            "status": {
+                                "type": "string",
+                                "description": "Filter by status: 'all', 'pending', or 'completed' (optional, default: 'all')"
+                            },
+                            "priority": {
+                                "type": "string",
+                                "description": "Filter by priority: 'high', 'medium', or 'low' (optional)"
+                            },
+                            "category": {
+                                "type": "string",
+                                "description": "Filter by category (optional)"
+                            },
+                            "keyword": {
+                                "type": "string",
+                                "description": "Search keyword in description (optional)"
                             }
                         },
                         "required": ["user_id"]
@@ -159,9 +296,84 @@ class TodoMCPServer:
                         "required": ["user_id", "todo_id"]
                     }
                 ),
+                        "required": ["user_id", "todo_id"]
+                    }
+                ),
+                        "required": ["user_id", "todo_id"]
+                    }
+                ),
+                Tool(
+                    name="update_task",
+                    description="Update a specific todo item's title or details",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "user_id": {
+                                "type": "integer",
+                                "description": "ID of the authenticated user"
+                            },
+                            "todo_id": {
+                                "type": "integer",
+                                "description": "ID of the todo item to update"
+                            },
+                            "title": {
+                                "type": "string",
+                                "description": "New title for the task"
+                            },
+                            "description": {
+                                "type": "string",
+                                "description": "New description for the task"
+                            },
+                            "completed": {
+                                "type": "boolean",
+                                "description": "Update completion status"
+                            }
+                        },
+                        "required": ["user_id", "todo_id"]
+                    }
+                ),
+                Tool(
+                    name="complete_task",
+                    description="Mark a specific todo item as completed",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "user_id": {
+                                "type": "integer",
+                                "description": "ID of the authenticated user"
+                            },
+                            "todo_id": {
+                                "type": "integer",
+                                "description": "ID of the todo item to mark as complete"
+                            }
+                        },
+                        "required": ["user_id", "todo_id"]
+                    }
+                ),
                 Tool(
                     name="delete_todo",
                     description="Delete a todo item",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "user_id": {
+                                "type": "integer",
+                                "description": "ID of the authenticated user"
+                            },
+                            "todo_id": {
+                                "type": "integer",
+                                "description": "ID of the todo item to delete"
+                            }
+                        },
+                        "required": ["user_id", "todo_id"]
+                    }
+                ),
+                        "required": ["user_id", "todo_id"]
+                    }
+                ),
+                Tool(
+                    name="remove_task",
+                    description="Delete a todo item permanently",
                     inputSchema={
                         "type": "object",
                         "properties": {

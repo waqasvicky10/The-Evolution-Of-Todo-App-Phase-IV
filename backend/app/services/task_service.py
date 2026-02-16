@@ -1,10 +1,11 @@
+
 """
 Task service for CRUD operations with user isolation.
 
 This module provides business logic for task management operations.
 All operations enforce user data isolation - users can only access their own tasks.
 """
-
+from typing import Optional
 from sqlmodel import Session, select
 from fastapi import HTTPException, status
 from datetime import datetime
@@ -12,23 +13,30 @@ from typing import List
 from app.models.task import Task
 
 
-def get_user_tasks(db: Session, user_id: int) -> List[Task]:
+def get_user_tasks(db: Session, user_id: int, completed: Optional[bool] = None, priority: Optional[str] = None, category: Optional[str] = None) -> List[Task]:
     """
-    Get all tasks for a specific user.
+    Get tasks for a specific user with optional filters.
 
     Args:
         db: Database session
         user_id: User ID to filter tasks
+        completed: Filter by completion status
+        priority: Filter by priority level
+        category: Filter by category
 
     Returns:
-        List of tasks belonging to the user
-
-    Example:
-        >>> tasks = get_user_tasks(db, user_id=1)
-        >>> print(len(tasks))
-        5
+        List of tasks belonging to the user matching filters
     """
-    tasks = db.exec(select(Task).where(Task.user_id == user_id)).all()
+    statement = select(Task).where(Task.user_id == user_id)
+    
+    if completed is not None:
+        statement = statement.where(Task.is_complete == completed)
+    if priority:
+        statement = statement.where(Task.priority == priority)
+    if category:
+        statement = statement.where(Task.category == category)
+        
+    tasks = db.exec(statement).all()
     return list(tasks)
 
 

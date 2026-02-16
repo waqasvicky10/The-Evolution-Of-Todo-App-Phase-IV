@@ -12,7 +12,7 @@ import { betterAuth } from "better-auth";
 // Determine database provider from DATABASE_URL
 const getDatabaseConfig = () => {
   const dbUrl = process.env.DATABASE_URL || "file:./auth.db";
-  
+
   if (dbUrl.startsWith("postgresql://") || dbUrl.startsWith("postgres://")) {
     return {
       provider: "postgresql" as const,
@@ -42,7 +42,6 @@ export const auth = betterAuth({
   basePath: "/api/auth",
   trustedOrigins: [
     process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000",
-    "http://localhost:8000", // FastAPI backend
   ],
 });
 

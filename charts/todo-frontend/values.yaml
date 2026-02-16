@@ -1,0 +1,32 @@
+# Default values for todo-frontend.
+replicaCount: 1
+
+image:
+  repository: todo-frontend
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+service:
+  type: LoadBalancer
+  port: 80
+
+env:
+  NEXT_PUBLIC_API_URL: "http://todo-backend:8000"
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Probes
+livenessProbe:
+  httpGet:
+    path: /
+    port: 3000
+readinessProbe:
+  httpGet:
+    path: /
+    port: 3000

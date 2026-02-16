@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phase III API Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        button { padding: 10px 15px; margin: 5px; background-color: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+        .result { margin-top: 10px; padding: 10px; background-color: #f8f9fa; border-radius: 3px; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Phase III AI Agent API Test</h1>
+        <p>This page tests the Phase III backend API running on port 8001.</p>
+        
+        <div class="test-section">
+            <h3>Health Check</h3>
+            <button onclick="testHealth()">Test Health Endpoint</button>
+            <div id="health-result" class="result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>Chat Functionality Test</h3>
+            <input type="text" id="test-message" value="Hello, can you help me add a task?" placeholder="Enter test message" style="width: 300px; padding: 8px;">
+            <button onclick="testChat()">Test Chat Endpoint</button>
+            <div id="chat-result" class="result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>Available Test Commands</h3>
+            <p>Try these commands to test functionality:</p>
+            <ul>
+                <li><em>Add a task to buy groceries</em></li>
+                <li><em>Show me my tasks</em></li>
+                <li><em>Complete task 1</em></li>
+                <li><em>Delete task 1</em> (will ask for confirmation)</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:8001/api';
+        
+        async function testHealth() {
+            const resultDiv = document.getElementById('health-result');
+            resultDiv.textContent = 'Testing...';
+            resultDiv.className = 'result';
+            
+            try {
+                const response = await fetch(`${API_BASE_URL.replace('/api', '')}/health`);
+                const data = await response.json();
+                
+                resultDiv.textContent = `Success: ${JSON.stringify(data)}`;
+                resultDiv.className = 'result success';
+            } catch (error) {
+                resultDiv.textContent = `Error: ${error.message}`;
+                resultDiv.className = 'result error';
+            }
+        }
+        
+        async function testChat() {
+            const messageInput = document.getElementById('test-message');
+            const message = messageInput.value.trim();
+            const resultDiv = document.getElementById('chat-result');
+            
+            if (!message) {
+                resultDiv.textContent = 'Please enter a message';
+                resultDiv.className = 'result error';
+                return;
+            }
+            
+            resultDiv.textContent = 'Sending...';
+            resultDiv.className = 'result';
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/chat`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer test_token'
+                    },
+                    body: JSON.stringify({ message: message })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                resultDiv.innerHTML = `<strong>Response:</strong> ${data.response}<br><strong>Timestamp:</strong> ${data.timestamp}`;
+                resultDiv.className = 'result success';
+            } catch (error) {
+                resultDiv.textContent = `Error: ${error.message}`;
+                resultDiv.className = 'result error';
+            }
+        }
+        
+        // Allow Enter key to submit test message
+        document.getElementById('test-message').addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                testChat();
+            }
+        });
+    </script>
+</body>
+</html>

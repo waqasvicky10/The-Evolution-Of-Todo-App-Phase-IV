@@ -2,6 +2,90 @@
 
 A complete, production-ready todo application implementing **all Phase II and Phase III requirements** from the specification documents.
 
+## Phase IV Fallback: Docker Compose Deployment
+
+If you encounter memory issues with Minikube/Hyper-V, use Docker Compose for local deployment. This simulates the Kubernetes environment using containers.
+
+### Prerequisites
+- Docker Desktop installed and running
+- Docker Compose installed
+
+### Setup & Run
+1. **Copy Environment Variables**:
+   ```powershell
+   copy .env.example .env
+   ```
+   *Edit `.env` and add your `OPENAI_API_KEY` or leave `MOCK_MODE=true`.*
+
+2. **Build and Start Services**:
+   ```powershell
+   docker-compose build
+   docker-compose up -d
+   ```
+
+3. **Verify Deployment**:
+   - **Backend API**: [http://localhost:8000/health](http://localhost:8000/health)
+   - **Frontend App**: [http://localhost:3000](http://localhost:3000)
+
+### Useful Commands
+- **Stop Services**: `docker-compose down`
+- **View Logs**: `docker-compose logs -f`
+- **Rebuild**: `docker-compose up -d --build`
+
+---
+
+
+## Phase IV – Local Kubernetes Deployment
+
+This phase focuses on deploying the Todo Chatbot monorepo to a local Kubernetes environment using Minikube and Helm.
+
+### Prerequisites
+- [Minikube](https://minikube.sigs.k8s.io/) (Run with Docker driver: `minikube start --driver=docker`)
+- [Helm v3+](https://helm.sh/)
+- `kubectl`
+- AI Tools: `kubectl-ai`, `kagent`, `docker ai`
+
+### Deployment Steps (PowerShell)
+
+1. **Connect to Minikube Docker Daemon**
+   ```powershell
+   minikube docker-env | Invoke-Expression
+   ```
+
+2. **Build Container Images**
+   ```powershell
+   docker build -t todo-backend:latest -f docker/backend.Dockerfile .
+   docker build -t todo-frontend:latest -f docker/frontend.Dockerfile .
+   ```
+
+3. **Configure Secrets**
+   ```powershell
+   # Use the provided template or manual command:
+   kubectl create secret generic todo-secrets `
+     --from-literal=database-url="sqlite:///./data/todo.db" `
+     --from-literal=auth-secret="hackathon-secret-123" `
+     --from-literal=openai-key="your-key-here"
+   ```
+
+4. **Install/Upgrade Charts**
+   ```powershell
+   helm upgrade --install backend ./charts/todo-backend
+   helm upgrade --install frontend ./charts/todo-frontend
+   ```
+
+5. **Expose Services**
+   ```powershell
+   minikube service todo-frontend --url
+   ```
+
+### AI-Assisted Operations (Bonus)
+
+- **Analyze Cluster Health**: `kagent analyze cluster health`
+- **Scale Backend**: `kubectl-ai scale deployment backend to 3 replicas`
+- **Debug Logs**: `kagent logs -f deployment/backend`
+
+---
+
 ## ✅ Phase II Compliance
 
 This app implements **all 10 User Stories** (US-201 to US-210) as specified in `PHASE_II_SPECIFICATION.md`:
@@ -276,6 +360,7 @@ This implementation follows:
 
 - ✅ Phase II: All 10 user stories implemented
 - ✅ Phase III: All conversational capabilities implemented
+- ✅ Phase IV: Local Kubernetes deployment with Minikube
 - ✅ Dual Interface: Traditional + AI Chat
 - ✅ Production Ready: Fully tested and deployed
 
@@ -287,6 +372,178 @@ This implementation follows:
 - **Seamless Integration** - Both interfaces use the same database
 - **Production Ready** - Error handling, validation, and security
 
+## 🚀 Phase IV: Local Kubernetes Deployment with Minikube
+
+Deploy the Todo App locally using Minikube and Helm charts.
+
+### Prerequisites
+
+- **Minikube** installed ([installation guide](https://minikube.sigs.k8s.io/docs/start/))
+- **kubectl** installed ([installation guide](https://kubernetes.io/docs/tasks/tools/))
+- **Helm 3** installed ([installation guide](https://helm.sh/docs/intro/install/))
+- **Docker** installed and running
+
+### 1. Start Minikube
+
+```bash
+# Start Minikube with recommended resources
+minikube start --driver=docker --cpus=2 --memory=3072mb
+
+# Verify Minikube is running
+minikube status
+```
+
+### 2. Build Docker Images in Minikube
+
+```bash
+# Use Minikube's Docker daemon (important!)
+# For PowerShell:
+& minikube docker-env --shell powershell | Invoke-Expression
+
+# For Bash/WSL:
+eval $(minikube docker-env)
+
+# Build backend image
+docker build -f docker/backend.Dockerfile -t todo-backend:latest .
+
+# Build frontend image
+docker build -f docker/frontend.Dockerfile -t todo-frontend:latest .
+
+# Verify images exist in Minikube
+docker images | grep todo
+```
+
+### 3. Configure Secrets
+
+```bash
+# Copy the secrets template
+cp k8s/secrets-template.yaml k8s/secrets.yaml
+
+# Edit k8s/secrets.yaml with your values
+# For base64 encoding in PowerShell:
+[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("your-value"))
+
+# For base64 encoding in Bash/WSL:
+echo -n "your-value" | base64
+
+# Apply the secrets to Kubernetes
+kubectl apply -f k8s/secrets.yaml
+```
+
+**Example Secrets:**
+- `DATABASE_URL`: Your Neon PostgreSQL URL or `postgresql://user:pass@localhost/db`
+- `BETTER_AUTH_SECRET`: Generate with `openssl rand -base64 32`
+- `OPENAI_API_KEY`: Use `sk-dummy-mock-mode-key` for mock mode
+- `MOCK_MODE`: Set to `"true"` to avoid API quota errors
+
+### 4. Deploy with Helm
+
+```bash
+# Install backend service
+helm install todo-backend charts/todo-backend/
+
+# Install frontend service
+helm install todo-frontend charts/todo-frontend/
+
+# Check deployment status
+kubectl get pods
+kubectl get services
+
+# Wait for pods to be ready (may take 1-2 minutes)
+kubectl wait --for=condition=ready pod -l app=todo-backend --timeout=120s
+kubectl wait --for=condition=ready pod -l app=todo-frontend --timeout=120s
+```
+
+### 5. Access the Application
+
+```bash
+# Get the frontend URL
+minikube service todo-frontend --url
+
+# Or access directly (NodePort 30080)
+echo "http://$(minikube ip):30080"
+```
+
+Open the URL in your browser to access the Todo App!
+
+### Troubleshooting
+
+**Check Pod Logs:**
+```bash
+# Backend logs
+kubectl logs -f deployment/todo-backend
+
+# Frontend logs
+kubectl logs -f deployment/todo-frontend
+```
+
+**Check Pod Status:**
+```bash
+# Describe pods for detailed error messages
+kubectl describe pod -l app=todo-backend
+kubectl describe pod -l app=todo-frontend
+
+# Check all resources
+kubectl get all
+```
+
+**Restart Deployments:**
+```bash
+# Restart backend
+kubectl rollout restart deployment/todo-backend
+
+# Restart frontend
+kubectl rollout restart deployment/todo-frontend
+```
+
+**Rebuild and Redeploy:**
+```bash
+# Delete Helm releases
+helm uninstall todo-backend
+helm uninstall todo-frontend
+
+# Rebuild images (make sure you're using Minikube's Docker daemon)
+docker build -f docker/backend.Dockerfile -t todo-backend:latest .
+docker build -f docker/frontend.Dockerfile -t todo-frontend:latest .
+
+# Reinstall Helm charts
+helm install todo-backend charts/todo-backend/
+helm install todo-frontend charts/todo-frontend/
+```
+
+**Check Health Endpoints:**
+```bash
+# Port-forward backend to check health
+kubectl port-forward deployment/todo-backend 8000:8000
+
+# In another terminal or browser:
+curl http://localhost:8000/health
+```
+
+**Common Issues:**
+
+- **ImagePullBackOff**: Make sure images were built in Minikube's Docker daemon (`eval $(minikube docker-env)`)
+- **CrashLoopBackOff**: Check logs with `kubectl logs` and verify secrets are correctly configured
+- **Pods not starting**: Check resource limits - may need to increase Minikube memory
+- **Cannot access frontend**: Verify NodePort service with `kubectl get svc` and use `minikube service todo-frontend`
+
+### Cleanup
+
+```bash
+# Uninstall Helm releases
+helm uninstall todo-backend
+helm uninstall todo-frontend
+
+# Delete secrets
+kubectl delete secret todo-backend-secrets
+
+# Stop Minikube
+minikube stop
+
+# Delete Minikube cluster (optional)
+minikube delete
+```
+
 ## 🤝 Contributing
 
 This is a hackathon project demonstrating Phase II and Phase III of "The Evolution of Todo App". The implementation follows spec-driven development principles.
@@ -297,4 +554,4 @@ This project is part of "The Evolution of Todo App" hackathon series.
 
 ---
 
-**Built with ❤️ for The Evolution of Todo App Hackathon - Phase II + Phase III**
+**Built with ❤️ for The Evolution of Todo App Hackathon - Phases II, III & IV**

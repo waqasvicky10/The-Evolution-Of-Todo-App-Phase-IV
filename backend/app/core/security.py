@@ -55,18 +55,20 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return bcrypt.checkpw(password_bytes, hashed_bytes)
 
 
-def create_access_token(user_id: int) -> str:
+def create_access_token(user_id: int, email: str = None, name: str = None) -> str:
     """
     Generate JWT access token for authenticated user.
 
     Args:
         user_id: User ID to encode in token
+        email: Optional user email to include in token payload
+        name: Optional user name to include in token payload
 
     Returns:
         JWT token string (valid for 15 minutes)
 
     Example:
-        >>> token = create_access_token(user_id=1)
+        >>> token = create_access_token(user_id=1, email="user@example.com")
         >>> # Token can be used in Authorization: Bearer <token>
     """
     payload = {
@@ -74,21 +76,30 @@ def create_access_token(user_id: int) -> str:
         "exp": datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
         "type": "access"
     }
+    
+    # Add optional fields if provided
+    if email:
+        payload["email"] = email
+    if name:
+        payload["name"] = name
+    
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
-def create_refresh_token(user_id: int) -> str:
+def create_refresh_token(user_id: int, email: str = None, name: str = None) -> str:
     """
     Generate JWT refresh token for token renewal.
 
     Args:
         user_id: User ID to encode in token
+        email: Optional user email to include in token payload
+        name: Optional user name to include in token payload
 
     Returns:
         JWT refresh token string (valid for 7 days)
 
     Example:
-        >>> refresh_token = create_refresh_token(user_id=1)
+        >>> refresh_token = create_refresh_token(user_id=1, email="user@example.com")
         >>> # Use this token to get new access token
     """
     payload = {
@@ -96,6 +107,13 @@ def create_refresh_token(user_id: int) -> str:
         "exp": datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
         "type": "refresh"
     }
+    
+    # Add optional fields if provided
+    if email:
+        payload["email"] = email
+    if name:
+        payload["name"] = name
+    
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 

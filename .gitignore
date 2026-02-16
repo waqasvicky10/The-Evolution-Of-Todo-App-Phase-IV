@@ -17,6 +17,7 @@ todo.db.bak
 
 # Environment
 .env
+.env.txt
 .env.local
 .env.*.local
 

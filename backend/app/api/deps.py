@@ -6,11 +6,12 @@ and user authentication.
 """
 
 from sqlmodel import Session, select
-from typing import Generator
+from typing import Generator, Dict, Any
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.database import get_session
 from app.core.security import verify_token
+from app.core.user_context import get_user_context_from_credentials
 from app.models.user import User
 
 
@@ -93,3 +94,46 @@ def get_current_user(
         )
 
     return user
+
+
+def get_user_context(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+) -> Dict[str, Any]:
+    """
+    Dependency function to get user context from JWT token.
+    
+    This is the main dependency for the GetUserContext skill.
+    Extracts and returns user_id, email, and name from the token
+    without needing to query the database.
+    
+    Args:
+        credentials: HTTP Bearer token from Authorization header
+        
+    Returns:
+        Dictionary containing:
+        - user_id: int - User's unique identifier
+        - email: str | None - User's email address
+        - name: str | None - User's name
+        
+    Raises:
+        HTTPException 401: If token is invalid or expired
+        
+    Example:
+        @app.get("/personalized")
+        def personalized_route(context: dict = Depends(get_user_context)):
+            return {"message": f"Hello {context['email']}!"}
+            
+    Pattern (GetUserContext Skill):
+        1. Request header provides Authorization: Bearer <token>
+        2. JWT is decoded using Better Auth secret
+        3. Returns: {"user_id": "...", "email": "...", "name": "..."}
+    """
+    try:
+        user_context = get_user_context_from_credentials(credentials)
+        return user_context
+    except ValueError as e:
+        # Token verification failed
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid or expired token: {str(e)}"
+        )

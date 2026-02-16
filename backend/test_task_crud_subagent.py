@@ -1,0 +1,99 @@
+"""
+Test script for TaskCRUDSubagent skill.
+
+This script verifies that:
+1. TaskCRUDSubagent prompt focuses on task operations.
+2. The agent correctly handles tool calls for tasks in this role.
+3. The agent refuses to handle "Who am I?" in this specialized role.
+"""
+
+import sys
+import unittest
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+# Add backend and project root to path
+backend_dir = Path(__file__).parent.resolve()
+project_root = backend_dir.parent.resolve()
+sys.path.insert(0, str(backend_dir))
+sys.path.insert(0, str(project_root))
+
+from phase_iii.agent.agent import TodoAgent
+from phase_iii.agent.providers.openai_provider import OpenAIProvider
+from app.core.agent_prompts import TASK_CRUD_SUBAGENT_PROMPT
+
+class TestTaskCRUDSubagent(unittest.TestCase):
+    
+    def setUp(self):
+        self.api_key = "mock_key"
+        self.provider = OpenAIProvider(api_key=self.api_key)
+        self.agent = TodoAgent(provider=self.provider)
+
+    @patch('phase_iii.agent.providers.openai_provider.OpenAIClient')
+    def test_task_operation_handling(self, mock_openai_client):
+        """Verify that the agent triggers tool calls for tasks."""
+        instance = mock_openai_client.return_value
+        
+        mock_response = MagicMock()
+        mock_choice = MagicMock()
+        mock_message = MagicMock()
+        
+        # Simulate a tool call to add_task
+        mock_tool_call = MagicMock()
+        mock_tool_call.id = "call_task_123"
+        mock_tool_call.function.name = "add_task"
+        mock_tool_call.function.arguments = '{"user_id": 1, "title": "Buy milk"}'
+        
+        mock_message.content = ""
+        mock_message.tool_calls = [mock_tool_call]
+        mock_choice.message = mock_message
+        mock_choice.finish_reason = "tool_calls"
+        mock_response.choices = [mock_choice]
+        mock_response.model_dump_json.return_value = "{}"
+        
+        instance.chat.completions.create.return_value = mock_response
+        
+        result = self.agent.process_message(
+            "Add task Buy milk", 
+            [], 
+            user_id=1, 
+            tools=[{"name": "add_task"}],
+            system_prompt=TASK_CRUD_SUBAGENT_PROMPT
+        )
+        
+        self.assertTrue(result["requires_tool_execution"])
+        self.assertEqual(result["tool_calls"][0]["name"], "add_task")
+
+    @patch('phase_iii.agent.providers.openai_provider.OpenAIClient')
+    def test_refusal_for_identity_query(self, mock_openai_client):
+        """Verify that the agent refuses identity queries in TaskCRUD mode."""
+        instance = mock_openai_client.return_value
+        
+        mock_response = MagicMock()
+        mock_choice = MagicMock()
+        mock_message = MagicMock()
+        
+        # Simulate a refusal text response
+        refusal_text = "I am only authorized to manage your tasks. Please ask the UserInfoSubagent for identity details."
+        mock_message.content = refusal_text
+        mock_message.tool_calls = None
+        mock_choice.message = mock_message
+        mock_choice.finish_reason = "stop"
+        mock_response.choices = [mock_choice]
+        mock_response.model_dump_json.return_value = "{}"
+        
+        instance.chat.completions.create.return_value = mock_response
+        
+        result = self.agent.process_message(
+            "Who am I?", 
+            [], 
+            user_id=1, 
+            tools=[{"name": "add_task"}],
+            system_prompt=TASK_CRUD_SUBAGENT_PROMPT
+        )
+        
+        self.assertFalse(result["requires_tool_execution"])
+        self.assertIn("only authorized to manage your tasks", result["response_text"])
+
+if __name__ == "__main__":
+    unittest.main()

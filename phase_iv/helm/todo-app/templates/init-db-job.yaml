@@ -1,0 +1,31 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: todo-db-init
+  namespace: todo-app
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  template:
+    spec:
+      containers:
+      - name: db-init
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ["/bin/bash", "-c", "cd /app && alembic upgrade head"]
+        env:
+        - name: DATABASE_PATH
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Chart.Name }}-config
+              key: DATABASE_PATH
+        volumeMounts:
+        - name: todo-db-storage
+          mountPath: /app/data
+      restartPolicy: OnFailure
+      volumes:
+      - name: todo-db-storage
+        persistentVolumeClaim:
+          claimName: todo-db-pvc

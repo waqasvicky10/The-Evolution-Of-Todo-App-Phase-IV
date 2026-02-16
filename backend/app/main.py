@@ -10,8 +10,6 @@ from app.config import settings
 from app.api.routes import auth, tasks, chat
 from app.routes import ai
 from app.database import init_db
-
-
 # Create FastAPI application
 app = FastAPI(
     title="Todo API - Phase II",
@@ -19,22 +17,27 @@ app = FastAPI(
     version="2.0.0"
 )
 
+@app.get("/health")
+def health():
+    return {"status": "healthy"}
 
-# Skip database initialization on startup for faster server start
-# Tables will be created by Alembic migrations or on first use
 @app.on_event("startup")
 async def startup_event():
-    """Fast startup - database tables created via migrations."""
-    print("[Startup] Server starting (database tables should be created via migrations)")
-    # Don't call init_db() - it's slow and tables should exist from migrations
-    # If tables don't exist, they'll be created on first request (slower but server starts fast)
+    """Fast startup - database tables created via init_db or migrations."""
+    print("[Startup] Server starting (database tables initialization)")
+    init_db()
 
 
-# Configure CORS - allow all localhost origins for development
-# Using allow_origins=["*"] for development to fix CORS issues
+# Configure CORS - allow specific origins for development
+# Wildcard ["*"] is not allowed when allow_credentials=True
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development (change in production)
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -62,14 +65,3 @@ def root():
         "version": "2.0.0",
         "status": "running"
     }
-
-
-@app.get("/health")
-def health_check():
-    """
-    Health check endpoint.
-
-    Returns:
-        Health status
-    """
-    return {"status": "healthy"}

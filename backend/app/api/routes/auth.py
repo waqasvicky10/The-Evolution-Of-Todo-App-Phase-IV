@@ -104,9 +104,9 @@ def login(
     # Authenticate user
     user = authenticate_user(db, email=request.email, password=request.password)
 
-    # Generate tokens
-    access_token = create_access_token(user.id)
-    refresh_token = create_refresh_token(user.id)
+    # Generate tokens with user email for context extraction (GetUserContext skill)
+    access_token = create_access_token(user.id, email=user.email)
+    refresh_token = create_refresh_token(user.id, email=user.email)
 
     # Return tokens
     return TokenResponse(
@@ -186,16 +186,20 @@ def refresh_token(request: RefreshTokenRequest):
                 detail="Invalid token type"
             )
 
-        # Extract user_id
+        # Extract user_id and email from refresh token
         user_id = payload.get("user_id")
         if not user_id:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token"
             )
+        
+        # Preserve email from refresh token for user context
+        email = payload.get("email")
+        name = payload.get("name")
 
-        # Generate new access token
-        new_access_token = create_access_token(user_id)
+        # Generate new access token with preserved context
+        new_access_token = create_access_token(user_id, email=email, name=name)
 
         # Return new access token with same refresh token
         return TokenResponse(

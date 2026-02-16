@@ -1,0 +1,5 @@
+# Skill: DeleteTask
+Description: Permanently remove a task.
+Tool: `remove_task(user_id, todo_id)`
+Purpose: Deleting tasks with confirmation.
+Usage: "Delete task 3" -> `remove_task(todo_id=3)`.

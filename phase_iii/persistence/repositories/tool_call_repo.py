@@ -27,7 +27,9 @@ from phase_iii.persistence.models.tool_call import (
 # Database path (shared with Phase II Streamlit app)
 import os
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if os.environ.get("VERCEL"):
+if os.environ.get("TODO_DB_PATH"):
+    DATABASE_PATH = os.environ.get("TODO_DB_PATH")
+elif os.environ.get("VERCEL"):
     DATABASE_PATH = "/tmp/todo.db"
 else:
     DATABASE_PATH = os.path.join(BASE_DIR, "todo.db")

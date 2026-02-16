@@ -24,7 +24,7 @@ import {
 // Constants
 // ============================================================================
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "");
 
 
 // ============================================================================
@@ -82,17 +82,17 @@ export function getAuthToken(): string | null {
 export function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
     const axiosError = error as AxiosError<{ detail: string | Array<{ msg: string; loc: string[] }> }>;
-    
+
     // Handle timeout errors specifically
     if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
       return "Request timed out. The server may be slow. Please try again.";
     }
-    
+
     // Handle network errors
     if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
       return "Cannot connect to server. Please check if the backend is running.";
     }
-    
+
     const detail = axiosError.response?.data?.detail;
 
     if (detail) {

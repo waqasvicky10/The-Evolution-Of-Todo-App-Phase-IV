@@ -58,6 +58,7 @@ export function BetterAuthProvider({ children }: { children: React.ReactNode }) 
     const result = await authClient.signUp.email({
       email,
       password,
+      name: email.split("@")[0], // Use email prefix as a default name
     });
 
     if (result.error) {

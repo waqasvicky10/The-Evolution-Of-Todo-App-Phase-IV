@@ -25,11 +25,19 @@ class Settings(BaseSettings):
     # OpenAI Integration
     OPENAI_API_KEY: str = ""
 
+    # Qwen Integration
+    QWEN_API_KEY: str = ""
+    QWEN_API_BASE: str = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1" # Default to Alibaba Cloud
+    QWEN_MODEL_NAME: str = "qwen-plus"
+    
+    # AI Model Selection
+    AI_MODEL: str = "openai" # "openai" or "qwen"
+
     # Environment
     ENVIRONMENT: str = "development"
 
     class Config:
-        env_file = ".env"
+        env_file = (".env", "../.env")
         case_sensitive = True
         extra = "ignore"
 

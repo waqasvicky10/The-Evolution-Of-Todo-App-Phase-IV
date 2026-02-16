@@ -9,7 +9,7 @@
 import { useState, useCallback } from "react";
 import axios from "axios";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "");
 
 // ============================================================================
 // Types
@@ -49,12 +49,12 @@ export function useAIStatus() {
     try {
       setIsLoading(true);
       setError(null);
-      
+
       const token = localStorage.getItem("access_token");
       const response = await axios.get(`${API_BASE_URL}/api/ai/status`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      
+
       setStatus(response.data);
     } catch (err) {
       setError("Failed to check AI status");
@@ -85,7 +85,7 @@ export function useTaskAnalysis() {
     try {
       setIsLoading(true);
       setError(null);
-      
+
       const token = localStorage.getItem("access_token");
       if (!token) {
         throw new Error("Authentication required");
@@ -101,7 +101,7 @@ export function useTaskAnalysis() {
           headers: { Authorization: `Bearer ${token}` },
         }
       );
-      
+
       setAnalysis(response.data);
       return response.data;
     } catch (err: any) {
@@ -140,7 +140,7 @@ export function useTaskSuggestions() {
     try {
       setIsLoading(true);
       setError(null);
-      
+
       const token = localStorage.getItem("access_token");
       if (!token) {
         throw new Error("Authentication required");
@@ -156,7 +156,7 @@ export function useTaskSuggestions() {
           headers: { Authorization: `Bearer ${token}` },
         }
       );
-      
+
       setSuggestions(response.data);
       return response.data;
     } catch (err: any) {
@@ -195,7 +195,7 @@ export function useTaskImprovement() {
     try {
       setIsLoading(true);
       setError(null);
-      
+
       const token = localStorage.getItem("access_token");
       if (!token) {
         throw new Error("Authentication required");
@@ -208,7 +208,7 @@ export function useTaskImprovement() {
           headers: { Authorization: `Bearer ${token}` },
         }
       );
-      
+
       setImprovement(response.data);
       return response.data;
     } catch (err: any) {
@@ -247,7 +247,7 @@ export function useSmartTaskCreation() {
     try {
       setIsLoading(true);
       setError(null);
-      
+
       const token = localStorage.getItem("access_token");
       if (!token) {
         throw new Error("Authentication required");
@@ -263,7 +263,7 @@ export function useSmartTaskCreation() {
           headers: { Authorization: `Bearer ${token}` },
         }
       );
-      
+
       setSmartTask(response.data);
       return response.data;
     } catch (err: any) {

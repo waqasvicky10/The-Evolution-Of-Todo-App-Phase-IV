@@ -1,0 +1,5 @@
+# Skill: GetUserContext
+Description: Retrieve user metadata (email, registration date) from JWT token without database lookup.
+Tool: `get_user_context(user_id)`
+Purpose: Authentication and personalization.
+Usage: Call at the start of every session.
